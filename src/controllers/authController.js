@@ -1,8 +1,8 @@
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import User from "../models/user.model.js";
-import Wallet from "../models/wallet.model.js";
-import Balance from "../models/balance.model.js";
+import User from "../models/user.js";
+import Wallet from "../models/wallet.js";
+import Balance from "../models/balance.js";
 import { writeAuditLog } from "../middlewares/auditLog.js";
 import { SUPPORTED_ASSETS } from "../utils/constants.js";
 

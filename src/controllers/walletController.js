@@ -1,7 +1,7 @@
-import Wallet from "../models/wallet.model.js";
-import Balance from "../models/balance.model.js";
-import Transaction from "../models/transaction.model.js";
-import WalletAddress from "../models/walletAddress.model.js";
+import Wallet from "../models/wallet.js";
+import Balance from "../models/balance.js";
+import Transaction from "../models/transaction.js";
+import WalletAddress from "../models/walletAddressModel.js";
 import { writeAuditLog } from "../middlewares/auditLog.js";
 import { assertPositiveAmount, to2 } from "../utils/money.js";
 import { SUPPORTED_ASSETS, SUPPORTED_NETWORKS } from "../utils/constants.js";

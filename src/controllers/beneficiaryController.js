@@ -1,4 +1,4 @@
-import Beneficiary from "../models/beneficiary.model.js";
+import Beneficiary from "../models/beneficiary.js";
 import { writeAuditLog } from "../middlewares/auditLog.js";
 
 export async function createBeneficiary(req, res) {
