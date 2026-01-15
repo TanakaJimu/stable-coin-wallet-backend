@@ -41,6 +41,11 @@ mongoose.connection.on("disconnected", () => {
 // Health check
 app.get("/", (req, res) => res.json({ status: "Stablecoin API running " }));
 
+// OpenAPI JSON endpoint
+app.get("/openapi.json", (req, res) => {
+  res.json(swaggerSpec);
+});
+
 // Swagger UI
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
   customCss: ".swagger-ui .topbar { display: none }",
