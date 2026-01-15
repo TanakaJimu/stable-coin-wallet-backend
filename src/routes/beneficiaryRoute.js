@@ -5,7 +5,7 @@ import {
   listBeneficiaries,
   updateBeneficiary,
   deleteBeneficiary,
-} from "../controllers/beneficiary.controller.js";
+} from "../controllers/beneficiaryController.js";
 
 const router = Router();
 router.use(requireAuth);

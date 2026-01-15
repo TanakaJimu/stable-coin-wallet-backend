@@ -8,7 +8,7 @@ import {
   send,
   swap,
   history,
-} from "../controllers/wallet.controller.js";
+} from "../controllers/walletController.js";
 
 const router = Router();
 router.use(requireAuth);
