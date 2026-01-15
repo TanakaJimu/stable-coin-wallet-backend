@@ -118,8 +118,6 @@ export async function signin(req, res) {
 }
 
 export async function signout(req, res) {
-  // With JWT, signout is typically handled client-side by deleting token.
-  // You can implement token blacklist later if needed.
   try {
     await writeAuditLog({
       userId: req.user?.id,
