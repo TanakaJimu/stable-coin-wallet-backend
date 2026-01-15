@@ -153,27 +153,57 @@ router.post("/signin", async (req, res) => {
  */
 router.post("/signout", async (req, res) => {
   try {
+    // 1) Read access token from Authorization header: "Bearer xxx"
+    const authHeader = req.headers.authorization || "";
+    const accessToken = authHeader.startsWith("Bearer ")
+      ? authHeader.split(" ")[1]
+      : null;
+
+    // 2) Read refresh token from body
     const { refreshToken } = req.body;
+
     if (!refreshToken) {
       return res.status(400).json({ message: "refreshToken required" });
     }
 
-    // Verify refresh token signature (optional but recommended)
+    // 3) Verify refresh token signature (recommended)
     try {
       jwt.verify(
         refreshToken,
         process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET
       );
     } catch {
-      // even if invalid, you can still attempt to remove it
+      // even if invalid, we can still attempt to remove it from DB
     }
 
-    await User.updateOne(
-      { "refreshTokens.token": refreshToken },
-      { $pull: { refreshTokens: { token: refreshToken } } }
-    );
+    // 4) If access token exists, decode it to identify the user (optional but best)
+    let userId = null;
+    if (accessToken) {
+      try {
+        const payload = jwt.verify(accessToken, process.env.JWT_SECRET);
+        userId = payload.sub || payload.id || payload.userId || null;
+      } catch {
+        // access token might be expired — still okay for logout
+      }
+    }
 
-    return res.json({ message: "Signed out" });
+    // 5) Remove refresh token from the user document
+    // If we have userId, target that user. Otherwise fallback to searching by token.
+    const result = userId
+      ? await User.updateOne(
+          { _id: userId, "refreshTokens.token": refreshToken },
+          { $pull: { refreshTokens: { token: refreshToken } } }
+        )
+      : await User.updateOne(
+          { "refreshTokens.token": refreshToken },
+          { $pull: { refreshTokens: { token: refreshToken } } }
+        );
+
+    // Optional: if no document updated, still return 200 (logout should be idempotent)
+    return res.json({
+      message: "Signed out",
+      removed: result.modifiedCount > 0,
+    });
   } catch (err) {
     console.error("Signout error:", err);
     return res.status(500).json({ message: "Server error" });
