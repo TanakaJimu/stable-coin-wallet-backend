@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 import cors from "cors";
 
 import authRoutes from "./src/routes/authRoute.js";
-import walletRoutes from "./src/routes/walletRoute.js";
+import walletRoutes from "./src/routes/walletRoutes.js";
 
 dotenv.config();
 
