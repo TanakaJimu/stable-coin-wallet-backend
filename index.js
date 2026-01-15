@@ -13,7 +13,12 @@ dotenv.config();
 const app = express();
 
 // middleware
-app.use(cors());
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: false
+}));
 app.use(express.json());
 
 // config
@@ -43,6 +48,8 @@ app.get("/", (req, res) => res.json({ status: "Stablecoin API running " }));
 
 // OpenAPI JSON endpoint
 app.get("/openapi.json", (req, res) => {
+  res.setHeader("Content-Type", "application/json");
+  res.setHeader("Access-Control-Allow-Origin", "*");
   res.json(swaggerSpec);
 });
 
@@ -50,6 +57,9 @@ app.get("/openapi.json", (req, res) => {
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
   customCss: ".swagger-ui .topbar { display: none }",
   customSiteTitle: "Stable Wallet Coin API Documentation",
+  swaggerOptions: {
+    persistAuthorization: true,
+  },
 }));
 
 // Routes
