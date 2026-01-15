@@ -9,7 +9,7 @@ const router = express.Router();
 // Helpers
 const signAccessToken = (user) => {
   return jwt.sign(
-    { sub: user._id.toString(), role: user.role },
+    { sub: user._id.toString() },
     process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRES_IN || "15m" }
   );
@@ -120,19 +120,14 @@ router.post("/signup", async (req, res) => {
       idNumber,
       email: email.toLowerCase(),
       phone,
-      password: hashed,
-      deviceId,
+      passwordHash: hashed,
+      deviceIdUsedToLogin: deviceId,
       lastLogin: new Date(),
+      status: "ACTIVE",
     });
 
     const accessToken = signAccessToken(user);
     const refreshToken = signRefreshToken(user);
-
-    // Store refresh token (simple approach)
-    await User.updateOne(
-      { _id: user._id },
-      { $push: { refreshTokens: { token: refreshToken } } }
-    );
 
     return res.status(201).json({
       message: "Signup successful",
@@ -144,9 +139,8 @@ router.post("/signup", async (req, res) => {
         lastName: user.lastName,
         email: user.email,
         phone: user.phone,
-        kycStatus: user.kycStatus,
-        role: user.role,
-        isActive: user.isActive,
+        status: user.status,
+        isEmailVerified: user.isEmailVerified,
       },
     });
   } catch (err) {
@@ -232,20 +226,20 @@ router.post("/signin", async (req, res) => {
       return res.status(400).json({ message: "Missing required fields." });
     }
 
-    // Find by email or phone (and include password)
+    // Find by email or phone (and include passwordHash)
     const user = await User.findOne({
       $or: [{ email: emailOrPhone.toLowerCase() }, { phone: emailOrPhone }],
-    }).select("+password");
+    }).select("+passwordHash");
 
     if (!user) return res.status(401).json({ message: "Invalid credentials." });
-    if (!user.isActive) return res.status(403).json({ message: "Account is disabled." });
+    if (user.status !== "ACTIVE") return res.status(403).json({ message: "Account is disabled." });
 
-    const ok = await bcrypt.compare(password, user.password);
+    const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) return res.status(401).json({ message: "Invalid credentials." });
 
     // Optional: device binding (block if device mismatch)
-    // If you want to ALLOW device change, you can update deviceId here instead.
-    if (user.deviceId !== deviceId) {
+    // If you want to ALLOW device change, you can update deviceIdUsedToLogin here instead.
+    if (user.deviceIdUsedToLogin && user.deviceIdUsedToLogin !== deviceId) {
       return res.status(403).json({ message: "Unrecognized device." });
     }
 
@@ -253,7 +247,7 @@ router.post("/signin", async (req, res) => {
     const refreshToken = signRefreshToken(user);
 
     user.lastLogin = new Date();
-    user.refreshTokens.push({ token: refreshToken });
+    user.deviceIdUsedToLogin = deviceId;
     await user.save();
 
     return res.json({
@@ -266,9 +260,8 @@ router.post("/signin", async (req, res) => {
         lastName: user.lastName,
         email: user.email,
         phone: user.phone,
-        kycStatus: user.kycStatus,
-        role: user.role,
-        isActive: user.isActive,
+        status: user.status,
+        isEmailVerified: user.isEmailVerified,
         lastLogin: user.lastLogin,
       },
     });
