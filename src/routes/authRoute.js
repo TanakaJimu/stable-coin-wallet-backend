@@ -24,8 +24,74 @@ const signRefreshToken = (user) => {
 };
 
 /**
- * POST /api/auth/signup
- * body: { firstName,lastName,idNumber,email,phone,password,deviceId }
+ * @swagger
+ * /api/auth/signup:
+ *   post:
+ *     summary: Register a new user
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - firstName
+ *               - lastName
+ *               - idNumber
+ *               - email
+ *               - phone
+ *               - password
+ *               - deviceId
+ *             properties:
+ *               firstName:
+ *                 type: string
+ *                 example: John
+ *               lastName:
+ *                 type: string
+ *                 example: Doe
+ *               idNumber:
+ *                 type: string
+ *                 example: "1234567890"
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 example: john.doe@example.com
+ *               phone:
+ *                 type: string
+ *                 example: "+1234567890"
+ *               password:
+ *                 type: string
+ *                 format: password
+ *                 example: "SecurePassword123!"
+ *               deviceId:
+ *                 type: string
+ *                 example: "device-uuid-1234"
+ *     responses:
+ *       201:
+ *         description: User created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AuthResponse'
+ *       400:
+ *         description: Missing required fields
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       409:
+ *         description: User already exists
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post("/signup", async (req, res) => {
   try {
@@ -90,8 +156,73 @@ router.post("/signup", async (req, res) => {
 });
 
 /**
- * POST /api/auth/signin
- * body: { emailOrPhone, password, deviceId }
+ * @swagger
+ * /api/auth/signin:
+ *   post:
+ *     summary: Sign in with email/phone and password
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - emailOrPhone
+ *               - password
+ *               - deviceId
+ *             properties:
+ *               emailOrPhone:
+ *                 type: string
+ *                 description: Email address or phone number
+ *                 example: john.doe@example.com
+ *               password:
+ *                 type: string
+ *                 format: password
+ *                 example: "SecurePassword123!"
+ *               deviceId:
+ *                 type: string
+ *                 example: "device-uuid-1234"
+ *     responses:
+ *       200:
+ *         description: Sign in successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/AuthResponse'
+ *                 - type: object
+ *                   properties:
+ *                     user:
+ *                       type: object
+ *                       properties:
+ *                         lastLogin:
+ *                           type: string
+ *                           format: date-time
+ *       400:
+ *         description: Missing required fields
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       401:
+ *         description: Invalid credentials
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       403:
+ *         description: Account disabled or unrecognized device
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post("/signin", async (req, res) => {
   try {
@@ -148,9 +279,36 @@ router.post("/signin", async (req, res) => {
 });
 
 /**
- * POST /api/auth/signout
- * body: { refreshToken }
- * Removes refresh token from DB so it can't be used again.
+ * @swagger
+ * /api/auth/signout:
+ *   post:
+ *     summary: Sign out user
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Signed out successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Signed out successfully
+ *       401:
+ *         description: Authorization token required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post("/signout", async (req, res) => {
   try {

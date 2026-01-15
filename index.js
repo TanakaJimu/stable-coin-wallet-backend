@@ -2,9 +2,11 @@ import express from "express";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import cors from "cors";
+import swaggerUi from "swagger-ui-express";
 
 import authRoutes from "./src/routes/authRoute.js";
 import walletRoutes from "./src/routes/walletRoutes.js";
+import { swaggerSpec } from "./src/config/swagger.js";
 
 dotenv.config();
 
@@ -38,6 +40,12 @@ mongoose.connection.on("disconnected", () => {
 
 // Health check
 app.get("/", (req, res) => res.json({ status: "Stablecoin API running " }));
+
+// Swagger UI
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customCss: ".swagger-ui .topbar { display: none }",
+  customSiteTitle: "Stable Wallet Coin API Documentation",
+}));
 
 // Routes
 app.use("/api/auth", authRoutes);
