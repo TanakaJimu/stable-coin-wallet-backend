@@ -13,6 +13,29 @@ async function getWalletOrThrow(userId) {
   return wallet;
 }
 
+export async function listWallets(req, res) {
+  try {
+    const { page = 1, limit = 50 } = req.query;
+    const p = Math.max(Number(page) || 1, 1);
+    const l = Math.min(Math.max(Number(limit) || 50, 1), 100);
+    const skip = (p - 1) * l;
+
+    const [items, total] = await Promise.all([
+      Wallet.find().sort({ createdAt: -1 }).skip(skip).limit(l),
+      Wallet.countDocuments(),
+    ]);
+
+    return res.json({
+      page: p,
+      limit: l,
+      total,
+      items,
+    });
+  } catch (e) {
+    return res.status(500).json({ message: e.message });
+  }
+}
+
 export async function getSummary(req, res) {
   try {
     const wallet = await getWalletOrThrow(req.user.id);

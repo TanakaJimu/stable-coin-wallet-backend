@@ -41,11 +41,39 @@ mongoose.connection.on("disconnected", () => {
 // Health check
 app.get("/", (req, res) => res.json({ status: "Stablecoin API running " }));
 
-// Swagger UI
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
-  customCss: ".swagger-ui .topbar { display: none }",
-  customSiteTitle: "Stable Wallet Coin API Documentation",
-}));
+// OpenAPI JSON endpoint (needed by Swagger UI)
+app.get("/openapi.json", (req, res) => {
+  res.setHeader("Content-Type", "application/json");
+  res.json(swaggerSpec);
+});
+
+// Swagger UI - dynamically set server URL for Render/production
+app.use("/api-docs", swaggerUi.serve);
+app.get("/api-docs", (req, res, next) => {
+  // Update server URL based on request (handles Render/proxy environments)
+  const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
+  const host = req.headers["x-forwarded-host"] || req.get("host") || `localhost:${PORT}`;
+  const serverUrl = `${protocol}://${host}`;
+  
+  const updatedSpec = {
+    ...swaggerSpec,
+    servers: [
+      {
+        url: serverUrl,
+        description: "Current server",
+      },
+    ],
+  };
+  
+  return swaggerUi.setup(updatedSpec, {
+    customCss: ".swagger-ui .topbar { display: none }",
+    customSiteTitle: "Stable Wallet Coin API Documentation",
+    swaggerOptions: {
+      persistAuthorization: true,
+      validatorUrl: null, // Disable external validator to avoid CORS issues
+    },
+  })(req, res, next);
+});
 
 // Routes
 app.use("/api/auth", authRoutes);

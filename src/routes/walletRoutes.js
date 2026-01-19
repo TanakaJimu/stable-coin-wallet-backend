@@ -1,6 +1,10 @@
 import { Router } from "express";
 import { requireAuth } from "../middlewares/auth.js";
+import Wallet from "../models/wallet.js";
+import Balance from "../models/balance.js";
+import { SUPPORTED_ASSETS } from "../utils/constants.js";
 import {
+  listWallets,
   getSummary,
   getReceiveAddress,
   topup,
@@ -12,6 +16,96 @@ import {
 
 const router = Router();
 router.use(requireAuth);
+
+async function ensureWalletAndBalances(userId) {
+  let wallet = await Wallet.findOne({ userId });
+  if (!wallet) {
+    wallet = await Wallet.create({ userId });
+  }
+
+  await Promise.all(
+    SUPPORTED_ASSETS.map((asset) =>
+      Balance.updateOne(
+        { walletId: wallet._id, asset },
+        { $setOnInsert: { available: 0, locked: 0 } },
+        { upsert: true }
+      )
+    )
+  );
+
+  return wallet;
+}
+
+// Guarantee wallet + balances exist for any wallet route (helps older accounts)
+router.use(async (req, res, next) => {
+  try {
+    await ensureWalletAndBalances(req.user.id);
+    next();
+  } catch (err) {
+    console.error("ensureWalletAndBalances failed:", err);
+    res.status(500).json({ message: "Wallet setup failed" });
+  }
+});
+
+/**
+ * @swagger
+ * /api/wallet/listWallets:
+ *   get:
+ *     summary: List wallets (paginated)
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Page number (1-based)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 50
+ *         description: Number of wallets per page
+ *     responses:
+ *       200:
+ *         description: List of wallets
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 page:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 total:
+ *                   type: integer
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id:
+ *                         type: string
+ *                       userId:
+ *                         type: string
+ *                       defaultFiat:
+ *                         type: string
+ *                       isLocked:
+ *                         type: boolean
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.get("/listWallets", listWallets);
 
 /**
  * @swagger

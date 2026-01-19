@@ -2,9 +2,32 @@ import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/user.js";
+import Wallet from "../models/wallet.js";
+import Balance from "../models/balance.js";
+import { SUPPORTED_ASSETS } from "../utils/constants.js";
 import AuditLog from "../models/auditLog.js";
 
 const router = express.Router();
+
+async function ensureWalletAndBalances(userId) {
+  // Create wallet if missing, and ensure balances for all supported assets
+  let wallet = await Wallet.findOne({ userId });
+  if (!wallet) {
+    wallet = await Wallet.create({ userId });
+  }
+
+  await Promise.all(
+    SUPPORTED_ASSETS.map((asset) =>
+      Balance.updateOne(
+        { walletId: wallet._id, asset },
+        { $setOnInsert: { available: 0, locked: 0 } },
+        { upsert: true }
+      )
+    )
+  );
+
+  return wallet;
+}
 
 // Helpers
 const signAccessToken = (user) => {
@@ -126,6 +149,9 @@ router.post("/signup", async (req, res) => {
       status: "ACTIVE",
     });
 
+    // Ensure wallet and balances are created for the user
+    await ensureWalletAndBalances(user._id);
+
     const accessToken = signAccessToken(user);
     const refreshToken = signRefreshToken(user);
 
@@ -242,6 +268,9 @@ router.post("/signin", async (req, res) => {
     if (user.deviceIdUsedToLogin && user.deviceIdUsedToLogin !== deviceId) {
       return res.status(403).json({ message: "Unrecognized device." });
     }
+
+    // Ensure wallet and balances exist (legacy accounts)
+    await ensureWalletAndBalances(user._id);
 
     const accessToken = signAccessToken(user);
     const refreshToken = signRefreshToken(user);
