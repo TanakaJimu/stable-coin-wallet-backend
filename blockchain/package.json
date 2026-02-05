@@ -1,0 +1,21 @@
+{
+    "name": "stable_wallet_coin_blockchain",
+    "version": "1.0.0",
+    "description": "Hardhat project for Stable Wallet Coin contracts",
+    "type": "module",
+    "scripts": {
+      "compile": "hardhat compile",
+      "test": "hardhat test",
+      "deploy:amoy": "hardhat run scripts/deploy.js --network amoy"
+    },
+    "devDependencies": {
+      "hardhat": "^2.22.0",
+      "@openzeppelin/contracts": "^5.1.0",
+      "@nomicfoundation/hardhat-ethers": "^3.0.0",
+      "ethers": "^6.13.0"
+    },
+    "dependencies": {
+      "dotenv": "^17.2.3"
+    }
+  }
+  
