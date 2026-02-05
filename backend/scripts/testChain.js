@@ -34,7 +34,7 @@ async function main() {
     console.log("Backend signer balance:", ethers.formatEther(balance), symbol);
   }
 
-  console.log("\n✅ Backend → blockchain test passed.");
+  console.log("\n Backend → blockchain test passed.");
 }
 
 main().catch((e) => {
