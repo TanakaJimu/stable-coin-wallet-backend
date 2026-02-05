@@ -1,27 +1,21 @@
 {
-  "name": "stable_wallet_coin_backend",
+  "name": "stable_coin_wallet",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "private": true,
+  "description": "Stable Wallet Coin: backend API + blockchain (Hardhat)",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "cd backend && npm start",
+    "dev": "cd backend && npm run dev",
+    "backend:install": "cd backend && npm install",
+    "blockchain:install": "cd blockchain && npm install",
+    "install:all": "npm run backend:install && npm run blockchain:install",
+    "compile": "cd blockchain && npm run compile",
+    "deploy:amoy": "cd blockchain && npm run deploy:amoy",
+    "test:blockchain": "cd blockchain && npm test",
+    "blockchain:node": "cd blockchain && npx hardhat node"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "module",
-  "dependencies": {
-    "bcryptjs": "^3.0.3",
-    "cors": "^2.8.5",
-    "dotenv": "^17.2.3",
-    "express": "^5.2.1",
-    "jsonwebtoken": "^9.0.3",
-    "mongoose": "^9.1.3",
-    "redoc-express": "^2.1.3",
-    "swagger-jsdoc": "^6.2.8",
-    "swagger-ui-express": "^5.0.1",
-    "uuid": "^13.0.0"
+  "devDependencies": {
+    "@nomicfoundation/hardhat-ethers": "^4.0.4",
+    "ethers": "^6.16.0"
   }
 }
