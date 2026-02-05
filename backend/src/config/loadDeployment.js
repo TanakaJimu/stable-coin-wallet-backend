@@ -1,5 +1,4 @@
-+-+
-+import { readFileSync, existsSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { resolve } from "path";
 
 /**

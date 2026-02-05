@@ -11,3 +11,13 @@ export function getSigner() {
   if (!pk) return null; // allow read-only mode
   return new ethers.Wallet(pk, getProvider());
 }
+
+/** Read-only: provider. Write: signer (requires BACKEND_SIGNER_PRIVATE_KEY). */
+export function getRunner({ write = false } = {}) {
+  if (write) {
+    const signer = getSigner();
+    if (!signer) throw new Error("BACKEND_SIGNER_PRIVATE_KEY required for write");
+    return signer;
+  }
+  return getProvider();
+}

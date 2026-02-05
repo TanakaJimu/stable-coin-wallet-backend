@@ -1,8 +1,8 @@
 {
-    "chainId": 80002,
-    "network": "amoy",
-    "contracts": {
-      "StableCoinWallet": "0x1234567890abcdef1234567890abcdef12345678",
-      "WalletNFT": "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"
-    }
+  "chainId": 80002,
+  "network": "amoy",
+  "contracts": {
+    "StableCoinWallet": "0x4BdA811a0F5002535a096109dacc15C992D751c0",
+    "WalletNFT": "0xECb3071B0bf2cEe31085e0C7888342C626C214d6"
   }
+}
