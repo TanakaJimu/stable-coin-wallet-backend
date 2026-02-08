@@ -4,7 +4,8 @@
   "private": true,
   "description": "Stable Wallet Coin: backend API + blockchain (Hardhat)",
   "scripts": {
-    "start": "cd backend && npm start",
+    "start": "node index.js",
+    "start:backend": "cd backend && npm start",
     "dev": "cd backend && npm run dev",
     "backend:install": "cd backend && npm install",
     "blockchain:install": "cd blockchain && npm install",
@@ -12,7 +13,8 @@
     "compile": "cd blockchain && npm run compile",
     "deploy:amoy": "cd blockchain && npm run deploy:amoy",
     "test:blockchain": "cd blockchain && npm test",
-    "blockchain:node": "cd blockchain && npx hardhat node"
+    "blockchain:node": "cd blockchain && npx hardhat node",
+    "postinstall": "cd backend && npm install"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ethers": "^4.0.4",
