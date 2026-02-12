@@ -13,7 +13,7 @@ const options = {
     },
     servers: [
       {
-        url: process.env.API_URL || "http://localhost:3000",
+        url: process.env.API_URL || `http://localhost:${process.env.PORT || 3000}`,
         description: "Development server",
       },
     ],
@@ -182,6 +182,10 @@ const options = {
       {
         name: "Transaction",
         description: "Transaction management and history endpoints",
+      },
+      {
+        name: "NFT",
+        description: "Wallet NFT minting and info",
       },
     ],
   },

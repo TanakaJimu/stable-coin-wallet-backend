@@ -7,6 +7,7 @@ import {
   listWallets,
   getSummary,
   getReceiveAddress,
+  addAsset,
   topup,
   receive,
   send,
@@ -130,6 +131,37 @@ router.get("/listWallets", listWallets);
  *               $ref: '#/components/schemas/Error'
  */
 router.get("/summary", getSummary);
+
+/**
+ * @swagger
+ * /api/wallet/add-asset:
+ *   post:
+ *     summary: Add a wallet balance for another supported asset
+ *     description: Lets the user add a new currency/asset to their wallet (e.g. EUR). Asset must be one of USD, USDT, USDC, DAI, EUR. If the balance already exists, returns it.
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [asset]
+ *             properties:
+ *               asset:
+ *                 type: string
+ *                 example: EUR
+ *                 description: Asset code (USD, USDT, USDC, DAI, EUR)
+ *     responses:
+ *       201:
+ *         description: Wallet balance added
+ *       200:
+ *         description: Balance already exists for this asset
+ *       400:
+ *         description: Missing asset or unsupported asset
+ */
+router.post("/add-asset", addAsset);
 
 /**
  * @swagger

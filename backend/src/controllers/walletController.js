@@ -46,6 +46,52 @@ export async function getSummary(req, res) {
   }
 }
 
+/**
+ * Add a new asset/currency balance to the user's wallet (e.g. add EUR if they don't have it yet).
+ * Body: { asset: "EUR" } — must be one of SUPPORTED_ASSETS.
+ */
+export async function addAsset(req, res) {
+  try {
+    const wallet = await getWalletOrThrow(req.user.id);
+    const raw = (req.body && req.body.asset) ? String(req.body.asset).toUpperCase().trim() : "";
+    if (!raw) return res.status(400).json({ message: "asset is required" });
+    if (!SUPPORTED_ASSETS.includes(raw)) {
+      return res.status(400).json({
+        message: "Unsupported asset",
+        supported: SUPPORTED_ASSETS,
+      });
+    }
+
+    const existing = await Balance.findOne({ walletId: wallet._id, asset: raw });
+    if (existing) {
+      return res.status(200).json({
+        message: "Balance already exists for this asset",
+        balance: existing,
+      });
+    }
+
+    const balance = await Balance.create({
+      walletId: wallet._id,
+      asset: raw,
+      available: 0,
+      locked: 0,
+    });
+
+    await writeAuditLog({
+      userId: req.user.id,
+      action: "WALLET_ADD_ASSET",
+      req,
+      entityType: "balance",
+      entityId: balance._id,
+      meta: { asset: raw },
+    });
+
+    return res.status(201).json({ balance, message: "Wallet balance added" });
+  } catch (e) {
+    return res.status(400).json({ message: e.message });
+  }
+}
+
 export async function getReceiveAddress(req, res) {
   try {
     const wallet = await getWalletOrThrow(req.user.id);

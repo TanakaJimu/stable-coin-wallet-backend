@@ -10,6 +10,7 @@ import walletRoutes from "./src/routes/walletRoutes.js";
 import beneficiaryRoutes from "./src/routes/beneficiaryRoute.js";
 import transactionRoutes from "./src/routes/transactionRoutes.js";
 import secretsRoutes from "./src/routes/secretsRoutes.js";
+import nftRoutes from "./src/routes/nftRoutes.js";
 import { swaggerSpec } from "./src/config/swagger.js";
 
 dotenv.config();
@@ -44,6 +45,24 @@ mongoose.connection.on("disconnected", () => {
 
 // Health check
 app.get("/", (req, res) => res.json({ status: "Stablecoin API running " }));
+
+// API index – list available API bases (so "APIs on localhost" are visible)
+app.get("/api", (req, res) => {
+  const base = `${req.protocol}://${req.get("host") || `localhost:${process.env.PORT || 3000}`}`;
+  res.json({
+    message: "Stable Wallet Coin API",
+    baseUrl: `${base}/api`,
+    endpoints: {
+      auth: `${base}/api/auth`,
+      wallet: `${base}/api/wallet`,
+      beneficiary: `${base}/api/beneficiary`,
+      transactions: `${base}/api/transactions`,
+      secrets: `${base}/api/secrets`,
+      nft: `${base}/api/nft`,
+    },
+    docs: { swagger: `${base}/api-docs`, redoc: `${base}/api-docs-redoc`, openapi: `${base}/openapi.json` },
+  });
+});
 
 // OpenAPI JSON endpoint (needed by Swagger UI)
 app.get("/openapi.json", (req, res) => {
@@ -101,6 +120,7 @@ app.use("/api/wallet", walletRoutes);
 app.use("/api/beneficiary", beneficiaryRoutes);
 app.use("/api/transactions", transactionRoutes);
 app.use("/api/secrets", secretsRoutes);
+app.use("/api/nft", nftRoutes);
 
 // 404
 app.use((req, res) => {
