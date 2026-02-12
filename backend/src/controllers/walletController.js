@@ -6,11 +6,67 @@ import { writeAuditLog } from "../middlewares/auditLog.js";
 import { assertPositiveAmount, to2 } from "../utils/money.js";
 import { SUPPORTED_ASSETS, SUPPORTED_NETWORKS } from "../utils/constants.js";
 
+/** Get the user's default wallet, or their first wallet if none is default. */
 async function getWalletOrThrow(userId) {
-  const wallet = await Wallet.findOne({ userId });
+  let wallet = await Wallet.findOne({ userId, isDefault: true });
+  if (!wallet) wallet = await Wallet.findOne({ userId }).sort({ createdAt: 1 });
   if (!wallet) throw new Error("Wallet not found");
   if (wallet.isLocked) throw new Error("Wallet locked");
   return wallet;
+}
+
+/**
+ * Create another wallet for the current user.
+ * Body: { name?: string, isDefault?: boolean }
+ */
+export async function createWallet(req, res) {
+  try {
+    const userId = req.user.id;
+    const name = (req.body && req.body.name) ? String(req.body.name).trim() || "My Wallet" : "My Wallet";
+    const setAsDefault = Boolean(req.body && req.body.isDefault);
+
+    const existingCount = await Wallet.countDocuments({ userId });
+    const wallet = await Wallet.create({
+      userId,
+      name: name || `Wallet ${existingCount + 1}`,
+      isDefault: setAsDefault || existingCount === 0,
+    });
+
+    if (setAsDefault || existingCount === 0) {
+      await Wallet.updateMany(
+        { userId, _id: { $ne: wallet._id } },
+        { $set: { isDefault: false } }
+      );
+    }
+
+    await Promise.all(
+      SUPPORTED_ASSETS.map((asset) =>
+        Balance.updateOne(
+          { walletId: wallet._id, asset },
+          { $setOnInsert: { available: 0, locked: 0 } },
+          { upsert: true }
+        )
+      )
+    );
+
+    await writeAuditLog({
+      userId: req.user.id,
+      action: "WALLET_CREATE",
+      req,
+      entityType: "wallet",
+      entityId: wallet._id,
+      meta: { name: wallet.name, isDefault: wallet.isDefault },
+    });
+
+    const balances = await Balance.find({ walletId: wallet._id }).sort({ asset: 1 });
+    return res.status(201).json({
+      message: "Wallet created",
+      wallet,
+      balances,
+    });
+  } catch (e) {
+    return res.status(400).json({ message: e.message });
+  }
 }
 
 export async function listWallets(req, res) {

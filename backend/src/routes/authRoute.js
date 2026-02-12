@@ -11,9 +11,10 @@ const router = express.Router();
 
 async function ensureWalletAndBalances(userId) {
   // Create wallet if missing, and ensure balances for all supported assets
-  let wallet = await Wallet.findOne({ userId });
+  let wallet = await Wallet.findOne({ userId, isDefault: true });
+  if (!wallet) wallet = await Wallet.findOne({ userId }).sort({ createdAt: 1 });
   if (!wallet) {
-    wallet = await Wallet.create({ userId });
+    wallet = await Wallet.create({ userId, name: "My Wallet", isDefault: true });
   }
 
   await Promise.all(

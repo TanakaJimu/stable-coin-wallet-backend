@@ -5,6 +5,7 @@ import Balance from "../models/balance.js";
 import { SUPPORTED_ASSETS } from "../utils/constants.js";
 import {
   listWallets,
+  createWallet,
   getSummary,
   getReceiveAddress,
   addAsset,
@@ -19,9 +20,10 @@ const router = Router();
 router.use(requireAuth);
 
 async function ensureWalletAndBalances(userId) {
-  let wallet = await Wallet.findOne({ userId });
+  let wallet = await Wallet.findOne({ userId, isDefault: true });
+  if (!wallet) wallet = await Wallet.findOne({ userId }).sort({ createdAt: 1 });
   if (!wallet) {
-    wallet = await Wallet.create({ userId });
+    wallet = await Wallet.create({ userId, name: "My Wallet", isDefault: true });
   }
 
   await Promise.all(
@@ -107,6 +109,66 @@ router.use(async (req, res, next) => {
  *               $ref: '#/components/schemas/Error'
  */
 router.get("/listWallets", listWallets);
+
+/**
+ * @swagger
+ * /api/wallet/create:
+ *   post:
+ *     summary: Create another wallet
+ *     description: Creates a new wallet for the current user. Optional name and isDefault. If this is the user's first wallet or isDefault is true, it becomes the default wallet used by summary/send/topup etc.
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 example: Savings
+ *                 description: Display name for the wallet
+ *               isDefault:
+ *                 type: boolean
+ *                 default: false
+ *                 description: Set as the default wallet for this user
+ *     responses:
+ *       201:
+ *         description: Wallet created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Wallet created
+ *                 wallet:
+ *                   type: object
+ *                   properties:
+ *                     _id:
+ *                       type: string
+ *                     userId:
+ *                       type: string
+ *                     name:
+ *                       type: string
+ *                     isDefault:
+ *                       type: boolean
+ *                     isLocked:
+ *                       type: boolean
+ *                 balances:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Balance'
+ *       400:
+ *         description: Bad request
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.post("/create", createWallet);
 
 /**
  * @swagger
