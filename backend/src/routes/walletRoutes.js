@@ -308,6 +308,14 @@ router.get("/receive-address", getReceiveAddress);
  *                 enum: [TRC20, ERC20]
  *                 default: TRC20
  *                 example: TRC20
+ *               fromAddress:
+ *                 type: string
+ *                 example: "external_wallet_123"
+ *                 description: Optional source address / reference for the topup
+ *               toAddress:
+ *                 type: string
+ *                 example: "internal_wallet_or_contract_456"
+ *                 description: Optional destination address for the topup
  *               reference:
  *                 type: string
  *                 example: "tx_ref_12345"

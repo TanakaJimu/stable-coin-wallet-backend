@@ -191,7 +191,7 @@ export async function getReceiveAddress(req, res) {
 export async function topup(req, res) {
   try {
     const wallet = await getWalletOrThrow(req.user.id);
-    const { asset, amount, network, reference } = req.body;
+    const { asset, amount, network, reference, fromAddress, toAddress } = req.body;
 
     const A = String(asset || "").toUpperCase();
     const N = String(network || "TRC20").toUpperCase();
@@ -213,6 +213,8 @@ export async function topup(req, res) {
       asset: A,
       network: N,
       amount: amt,
+      fromAddress: fromAddress || null,
+      toAddress: toAddress || null,
       reference: reference || null,
     });
 
@@ -222,7 +224,7 @@ export async function topup(req, res) {
       req,
       entityType: "transaction",
       entityId: tx._id,
-      meta: { asset: A, amount: amt, network: N },
+      meta: { asset: A, amount: amt, network: N, fromAddress, toAddress },
     });
 
     return res.status(201).json({ balance: bal, tx });
