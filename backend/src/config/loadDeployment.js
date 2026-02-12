@@ -15,6 +15,8 @@ import { resolve } from "path";
  */
 const CHAIN_ID_TO_NETWORK = {
   80002: "amoy",
+  80001: "mumbai",
+  5: "goerli",
   137: "polygon",
   31337: "localhost",
 };

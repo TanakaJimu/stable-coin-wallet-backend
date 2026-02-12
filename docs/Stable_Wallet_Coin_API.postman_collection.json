@@ -1,0 +1,135 @@
+{
+  "info": {
+    "name": "Stable Wallet Coin API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "token", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Signup",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Tanaka\",\n  \"lastName\": \"Chuwe\",\n  \"email\": \"tchuwe@gmail.com\",\n  \"phone\": \"+26377xxxxxxx\",\n  \"password\": \"Str0ngP@ssw0rd\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/signup"
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": "var j = pm.response.json(); if (j.token) pm.collectionVariables.set('token', j.token);"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"tchuwe@gmail.com\",\n  \"password\": \"Str0ngP@ssw0rd\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Wallet",
+      "item": [
+        {
+          "name": "Receive address",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/wallet/receive-address?asset=USDT&network=ERC20"
+          }
+        },
+        {
+          "name": "Summary",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/wallet/summary"
+          }
+        },
+        {
+          "name": "Topup",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"asset\": \"USDT\",\n  \"network\": \"ERC20\",\n  \"amount\": 50,\n  \"reference\": \"fiat-topup-0001\"\n}"
+            },
+            "url": "{{baseUrl}}/api/wallet/topup"
+          }
+        },
+        {
+          "name": "Send",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"asset\": \"USDT\",\n  \"amount\": 10,\n  \"network\": \"ERC20\",\n  \"toAddress\": \"0xRecipientAddressHere\",\n  \"memo\": \"Payment\"\n}"
+            },
+            "url": "{{baseUrl}}/api/wallet/send"
+          }
+        },
+        {
+          "name": "History",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/wallet/history?limit=30"
+          }
+        }
+      ]
+    },
+    {
+      "name": "NFT",
+      "item": [
+        {
+          "name": "Mint",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tokenUri\": \"https://your-metadata-url/1.json\",\n  \"toAddress\": \"0xUserAddress\"\n}"
+            },
+            "url": "{{baseUrl}}/api/nft/mint"
+          }
+        },
+        {
+          "name": "Mint info",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/nft/info"
+          }
+        }
+      ]
+    }
+  ]
+}

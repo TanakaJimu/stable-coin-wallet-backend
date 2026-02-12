@@ -43,6 +43,14 @@ mongoose.connection.on("disconnected", () => {
   console.warn("⚠️ MongoDB disconnected");
 });
 
+// Optional: start deposit watcher (credits DB when users deposit to Vault). Set ENABLE_DEPOSIT_WATCHER=1 to enable.
+if (process.env.ENABLE_DEPOSIT_WATCHER === "1") {
+  import("./src/workers/depositProcessor.js").then(({ runDepositProcessor }) => {
+    runDepositProcessor();
+    console.log(" Deposit watcher started");
+  }).catch((e) => console.warn(" Deposit watcher not started:", e?.message));
+}
+
 // Health check
 app.get("/", (req, res) => res.json({ status: "Stablecoin API running " }));
 

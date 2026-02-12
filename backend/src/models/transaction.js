@@ -26,7 +26,11 @@ const TransactionSchema = new mongoose.Schema(
     fee: { type: Number, default: 0 },
 
     // reference
-    reference: { type: String, trim: true, default: null }
+   reference: { type: String, trim: true, default: null },
+
+    // on-chain
+    txHash: { type: String, trim: true, default: null, index: true },
+    confirmations: { type: Number, default: null }
   },
   { timestamps: true }
 );

@@ -1,5 +1,6 @@
 import { expect } from "chai";
-import { ethers } from "hardhat";
+import hre from "hardhat";
+const { ethers } = hre;
 
 describe("StableCoinWallet", function () {
   it("Should deploy with correct name and symbol", async function () {

@@ -6,6 +6,18 @@ import { writeAuditLog } from "../middlewares/auditLog.js";
 import { assertPositiveAmount, to2 } from "../utils/money.js";
 import { SUPPORTED_ASSETS, SUPPORTED_NETWORKS } from "../utils/constants.js";
 
+/** Custodial: get Vault address + deposit reference (w_<walletId>) for attribution. Returns null if no Vault. */
+async function getVaultReceiveInfo(walletId) {
+  try {
+    const { getContracts } = await import("../blockchain/contracts.js");
+    const { vault } = getContracts({ write: false });
+    if (!vault) return null;
+    return { vaultAddress: vault.target, depositReference: `w_${walletId}` };
+  } catch {
+    return null;
+  }
+}
+
 /** Get the user's default wallet, or their first wallet if none is default. */
 async function getWalletOrThrow(userId) {
   let wallet = await Wallet.findOne({ userId, isDefault: true });
@@ -159,10 +171,29 @@ export async function getReceiveAddress(req, res) {
     if (!SUPPORTED_ASSETS.includes(A)) return res.status(400).json({ message: "Unsupported asset" });
     if (!SUPPORTED_NETWORKS.includes(N)) return res.status(400).json({ message: "Unsupported network" });
 
-    // for now: return default address if exists
-    let addr = await WalletAddress.findOne({ walletId: wallet._id, asset: A, network: N, isDefault: true });
+    // Custodial: return Vault address + deposit reference so watcher can attribute deposit to this wallet
+    const vaultInfo = await getVaultReceiveInfo(wallet._id.toString());
+    if (vaultInfo) {
+      await writeAuditLog({
+        userId: req.user.id,
+        action: "WALLET_RECEIVE_ADDRESS_VIEW",
+        req,
+        entityType: "walletAddress",
+        entityId: wallet._id,
+        meta: { asset: A, network: N, custodial: true },
+      });
+      return res.json({
+        address: vaultInfo.vaultAddress,
+        depositReference: vaultInfo.depositReference,
+        asset: A,
+        network: N,
+        custodial: true,
+        message: "Use this address and reference when depositing; include reference in vault.deposit(..., reference)",
+      });
+    }
 
-    // if none, create a fake placeholder (replace later with real address generator)
+    // Non-custodial / fallback: return stored or placeholder address
+    let addr = await WalletAddress.findOne({ walletId: wallet._id, asset: A, network: N, isDefault: true });
     if (!addr) {
       addr = await WalletAddress.create({
         walletId: wallet._id,
@@ -172,7 +203,6 @@ export async function getReceiveAddress(req, res) {
         isDefault: true,
       });
     }
-
     await writeAuditLog({
       userId: req.user.id,
       action: "WALLET_RECEIVE_ADDRESS_VIEW",
@@ -181,7 +211,6 @@ export async function getReceiveAddress(req, res) {
       entityId: addr._id,
       meta: { asset: A, network: N },
     });
-
     return res.json(addr);
   } catch (e) {
     return res.status(400).json({ message: e.message });
@@ -303,16 +332,37 @@ export async function send(req, res) {
     bal.available = to2(bal.available - totalDebit);
     await bal.save();
 
+    let txHash = null;
+    let status = "COMPLETED";
+    // Custodial on-chain: operator calls Vault.withdrawTo (optional)
+    try {
+      const { getContracts } = await import("../blockchain/contracts.js");
+      const { vault, stableToken, deployment } = getContracts({ write: true });
+      const tokenAddress = deployment.contracts?.StableToken || deployment.contracts?.StableCoinWallet;
+      if (vault && tokenAddress) {
+        const { ethers: e } = await import("ethers");
+        const amountWei = e.parseUnits(String(amt), 18);
+        const ref = `send_${wallet._id}_${Date.now()}`;
+        const tx = await vault.withdrawTo(tokenAddress, toAddress, amountWei, ref);
+        const receipt = await tx.wait();
+        txHash = receipt.hash;
+        status = "COMPLETED";
+      }
+    } catch (_) {
+      // Fallback: ledger-only send (no on-chain tx)
+    }
+
     const tx = await Transaction.create({
       walletId: wallet._id,
       type: "SEND",
-      status: "COMPLETED",
+      status,
       asset: A,
       network: N,
       amount: amt,
       fee: f,
       toAddress,
       memo: memo || null,
+      txHash: txHash || undefined,
     });
 
     await writeAuditLog({
@@ -321,7 +371,7 @@ export async function send(req, res) {
       req,
       entityType: "transaction",
       entityId: tx._id,
-      meta: { asset: A, amount: amt, network: N, toAddress },
+      meta: { asset: A, amount: amt, network: N, toAddress, txHash },
     });
 
     return res.status(201).json({ balance: bal, tx });

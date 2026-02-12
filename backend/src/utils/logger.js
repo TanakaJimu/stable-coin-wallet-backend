@@ -1,0 +1,19 @@
+/**
+ * Simple logger for backend. In production, replace with structured logging (e.g. pino, winston).
+ */
+const isDev = process.env.NODE_ENV !== "production";
+
+export const logger = {
+  info(...args) {
+    console.log("[INFO]", new Date().toISOString(), ...args);
+  },
+  warn(...args) {
+    console.warn("[WARN]", new Date().toISOString(), ...args);
+  },
+  error(...args) {
+    console.error("[ERROR]", new Date().toISOString(), ...args);
+  },
+  debug(...args) {
+    if (isDev) console.debug("[DEBUG]", new Date().toISOString(), ...args);
+  },
+};

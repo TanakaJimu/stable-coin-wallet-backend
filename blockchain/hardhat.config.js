@@ -12,13 +12,28 @@ export default {
     }
   },
     networks: {
-      localhost: {
-        url: "http://127.0.0.1:8545",
-        chainId: 31337
-      },
+    localhost: {
+      url: "http://127.0.0.1:8545",
+      chainId: 31337
+    },
     amoy: {
-      url: process.env.BLOCKCHAIN_RPC_URL || "",
+      url: process.env.BLOCKCHAIN_RPC_URL || process.env.RPC_URL || "",
       chainId: 80002,
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : []
+    },
+    mumbai: {
+      url: process.env.BLOCKCHAIN_RPC_URL || process.env.RPC_URL || "https://rpc.ankr.com/polygon_mumbai",
+      chainId: 80001,
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : []
+    },
+    goerli: {
+      url: process.env.BLOCKCHAIN_RPC_URL || process.env.RPC_URL || "https://rpc.ankr.com/eth_goerli",
+      chainId: 5,
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : []
+    },
+    polygon: {
+      url: process.env.BLOCKCHAIN_RPC_URL || process.env.RPC_URL || "https://polygon-rpc.com",
+      chainId: 137,
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : []
     }
   }
