@@ -150,15 +150,37 @@ router.post("/signup", async (req, res) => {
     });
 
     // Ensure wallet and balances are created for the user
-    await ensureWalletAndBalances(user._id);
+    const wallet = await ensureWalletAndBalances(user._id);
 
     const accessToken = signAccessToken(user);
     const refreshToken = signRefreshToken(user);
+
+    // Wallets created on signup (with balances)
+    const wallets = await Wallet.find({ userId: user._id }).sort({ createdAt: 1 });
+    const walletsWithBalances = await Promise.all(
+      wallets.map(async (w) => {
+        const balances = await Balance.find({ walletId: w._id }).sort({ asset: 1 });
+        return {
+          _id: w._id,
+          userId: w.userId,
+          defaultFiat: w.defaultFiat,
+          isLocked: w.isLocked,
+          createdAt: w.createdAt,
+          balances: balances.map((b) => ({
+            asset: b.asset,
+            available: b.available,
+            locked: b.locked,
+          })),
+        };
+      })
+    );
 
     return res.status(201).json({
       message: "Signup successful",
       accessToken,
       refreshToken,
+      role: user.role || "USER",
+      wallets: walletsWithBalances,
       user: {
         id: user._id,
         firstName: user.firstName,
@@ -270,7 +292,7 @@ router.post("/signin", async (req, res) => {
     }
 
     // Ensure wallet and balances exist (legacy accounts)
-    await ensureWalletAndBalances(user._id);
+    const wallet = await ensureWalletAndBalances(user._id);
 
     const accessToken = signAccessToken(user);
     const refreshToken = signRefreshToken(user);
@@ -279,10 +301,32 @@ router.post("/signin", async (req, res) => {
     user.deviceIdUsedToLogin = deviceId;
     await user.save();
 
+    // Wallets created on signup (this user's wallet(s) with balances)
+    const wallets = await Wallet.find({ userId: user._id }).sort({ createdAt: 1 });
+    const walletsWithBalances = await Promise.all(
+      wallets.map(async (w) => {
+        const balances = await Balance.find({ walletId: w._id }).sort({ asset: 1 });
+        return {
+          _id: w._id,
+          userId: w.userId,
+          defaultFiat: w.defaultFiat,
+          isLocked: w.isLocked,
+          createdAt: w.createdAt,
+          balances: balances.map((b) => ({
+            asset: b.asset,
+            available: b.available,
+            locked: b.locked,
+          })),
+        };
+      })
+    );
+
     return res.json({
       message: "Signin successful",
       accessToken,
       refreshToken,
+      role: user.role || "USER",
+      wallets: walletsWithBalances,
       user: {
         id: user._id,
         firstName: user.firstName,

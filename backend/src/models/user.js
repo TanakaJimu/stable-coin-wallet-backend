@@ -18,7 +18,8 @@ const UserSchema = new mongoose.Schema(
     // + 3 crucial extras
     isEmailVerified: { type: Boolean, default: false },
     status: { type: String, enum: ["ACTIVE", "SUSPENDED"], default: "ACTIVE" },
-    pinHash: { type: String, default: null }
+    pinHash: { type: String, default: null },
+    role: { type: String, enum: ["USER", "ADMIN"], default: "USER" },
   },
   { timestamps: true }
 );
