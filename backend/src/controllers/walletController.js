@@ -20,10 +20,24 @@ export async function listWallets(req, res) {
     const l = Math.min(Math.max(Number(limit) || 50, 1), 100);
     const skip = (p - 1) * l;
 
-    const [items, total] = await Promise.all([
+    const [wallets, total] = await Promise.all([
       Wallet.find().sort({ createdAt: -1 }).skip(skip).limit(l),
       Wallet.countDocuments(),
     ]);
+
+    const items = await Promise.all(
+      wallets.map(async (w) => {
+        const balances = await Balance.find({ walletId: w._id }).sort({ asset: 1 });
+        return {
+          ...w.toObject(),
+          balances: balances.map((b) => ({
+            asset: b.asset,
+            available: b.available,
+            locked: b.locked,
+          })),
+        };
+      })
+    );
 
     return res.json({
       page: p,
