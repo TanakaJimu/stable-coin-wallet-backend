@@ -81,11 +81,16 @@ All routes require **requireAuth**.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/secrets/createSecrets` | Store encrypted wallet address + private key |
+| POST | `/api/secrets/createSecrets` | **Generate** a new custodial address (server creates address + encrypted key). Body optional: `walletId?`, `network?`, `asset?`, `label?`, `setDefault?`. Do not send userAddress/privateKey. |
 | GET | `/api/secrets/readSecrets` | Read secrets (address only) |
 | GET | `/api/secrets/readDecryptedSecrets` | Read decrypted secrets (sensitive) |
 | PUT | `/api/secrets/updateSecrets` | Update secrets |
 | DELETE | `/api/secrets/deleteSecrets` | Delete secrets |
+| POST | `/api/secrets/generate` | **Custodial:** generate new address (ethers), store encrypted key; body `walletId?`, `network?`, `asset?`, `label?`, `setDefault?` |
+| GET | `/api/secrets` | **Custodial:** list addresses (no private key) |
+| GET | `/api/secrets/:id` | **Custodial:** get one secret metadata |
+| POST | `/api/secrets/read-decrypted` | **Custodial:** return private key (requires `x-confirm: true` + body `secretId`; rate limited) |
+| DELETE | `/api/secrets/:id` | **Custodial:** soft-delete secret |
 
 ---
 

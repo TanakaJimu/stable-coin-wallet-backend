@@ -6,6 +6,11 @@ import {
   readDecryptedSecrets,
   updateSecrets,
   deleteSecrets,
+  generateCustodialAddress,
+  listCustodialSecrets,
+  getSecretById,
+  readDecryptedStrict,
+  deleteSecretById,
 } from "../controllers/secretsController.js";
 
 const router = Router();
@@ -17,43 +22,60 @@ router.use(requireAuth);
  * @swagger
  * /api/secrets/createSecrets:
  *   post:
- *     summary: Create user secrets (store address and private key encrypted)
+ *     summary: Generate a new custodial address (server creates address and encrypted key)
+ *     description: Creates a new Ethereum-style address via ethers; private key is encrypted and stored. Do NOT send userAddress or privateKey — the server generates the address.
  *     tags: [Secrets]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
- *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required:
- *               - userAddress
- *               - privateKey
+ *             description: Only these fields; walletId is determined by the backend (default wallet).
  *             properties:
- *               userAddress:
- *                 type: string
- *                 pattern: '^0x[a-fA-F0-9]{40}$'
- *                 description: User's Ethereum wallet address
- *                 example: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
- *               privateKey:
- *                 type: string
- *                 description: User's private key (will be encrypted before storage)
- *                 example: "0x..."
  *               network:
  *                 type: string
- *                 default: "polygon"
- *                 description: Blockchain network
- *                 example: "polygon"
+ *                 default: "POLYGON_AMOY"
+ *                 example: "POLYGON_AMOY"
+ *               asset:
+ *                 type: string
+ *                 example: "USDT"
  *               label:
  *                 type: string
- *                 description: Optional label for this secret
- *                 example: "My Main Wallet"
+ *                 example: "deposit-1"
+ *               setDefault:
+ *                 type: boolean
+ *                 default: false
  *     responses:
  *       201:
- *         description: Secrets created successfully
+ *         description: New custodial address generated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 secretId:
+ *                   type: string
+ *                 address:
+ *                   type: string
+ *                 walletId:
+ *                   type: string
+ *                 network:
+ *                   type: string
+ *                 asset:
+ *                   type: string
+ *                   nullable: true
+ *                   example: "USDT"
+ *                 default:
+ *                   type: boolean
+ *                   description: Whether this address is the default for the wallet
+ *                 isCustodial:
+ *                   type: boolean
  *       400:
- *         description: Validation error
+ *         description: Validation error (e.g. do not send userAddress/privateKey)
  *       401:
  *         description: Unauthorized
  */
@@ -195,6 +217,13 @@ router.put("/updateSecrets", updateSecrets);
  *         description: Unauthorized
  */
 router.delete("/deleteSecrets", deleteSecrets);
+
+// ---------- Custodial (server-generated) address API ----------
+router.post("/generate", generateCustodialAddress);
+router.get("/", listCustodialSecrets);
+router.get("/:id", getSecretById);
+router.post("/read-decrypted", readDecryptedStrict);
+router.delete("/:id", deleteSecretById);
 
 export default router;
 

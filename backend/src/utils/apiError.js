@@ -1,3 +1,5 @@
+import { logger } from "./logger.js";
+
 /**
  * Custom API Error Class
  * Follows SOLID principles - Single Responsibility: Error handling
@@ -88,13 +90,14 @@ export const asyncHandler = (fn) => {
         return error.send(res);
       }
 
-      // Log unexpected errors
-      console.error("Unexpected error:", error);
+      // Log full error so root cause is visible in logs (path, message, stack)
+      logger.error("Unhandled error in", req.method, req.path, ":", error?.message || error);
+      if (error?.stack) logger.error(error.stack);
 
-      // Send generic error response
+      // Include original message in response so client can identify root cause
       const apiError = ApiError.internalError(
         "An unexpected error occurred",
-        process.env.NODE_ENV === "development" ? error.message : undefined
+        { originalMessage: error?.message || String(error), code: error?.code }
       );
       return apiError.send(res);
     });

@@ -9,7 +9,10 @@ const WalletAddressSchema = new mongoose.Schema(
     address: { type: String, required: true, trim: true },
     label: { type: String, trim: true, default: null },
 
-    isDefault: { type: Boolean, default: false }
+    isDefault: { type: Boolean, default: false },
+    // Link to custodial Secret (server-generated address + encrypted key)
+    secretId: { type: mongoose.Schema.Types.ObjectId, ref: "Secret", default: null },
+    isCustodial: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
