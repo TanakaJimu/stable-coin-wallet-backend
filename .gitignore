@@ -36,3 +36,6 @@ Thumbs.db
 dist/
 build/
 
+# Large archives (GitHub limit 100 MB)
+*.zip
+
