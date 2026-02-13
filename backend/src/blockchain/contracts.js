@@ -1,6 +1,7 @@
 /**
  * Load ABIs from Hardhat artifacts and return ethers Contract instances.
- * Supports legacy (StableCoinWallet, WalletNFT) and on-chain set (StableToken, Vault, NFTPass).
+ * Supports legacy (StableCoinWallet, WalletNFT), on-chain set (StableToken, Vault, NFTPass),
+ * and mock stablecoins (MockUSDT, MockUSDC) on Polygon Amoy.
  */
 import { ethers } from "ethers";
 import { readFileSync, existsSync } from "fs";
@@ -37,12 +38,28 @@ export function getContracts({ write = false } = {}) {
 
   const result = { deployment };
 
-  // Stable token: prefer StableToken (on-chain), fallback StableCoinWallet (legacy)
-  const stableAddress = c.StableToken || c.StableCoinWallet;
-  if (!stableAddress) throw new Error("Deployment missing contracts.StableToken or StableCoinWallet");
-  const StableArtifact = tryLoadArtifact("StableToken") || loadArtifact("StableCoinWallet");
-  result.stableToken = new ethers.Contract(stableAddress, StableArtifact.abi, runner);
-  result.stableCoinWallet = result.stableToken;
+  // At least one token contract must exist (stable or mocks)
+  const hasStable = !!(c.StableToken || c.StableCoinWallet);
+  const hasMocks = !!(c.MockUSDT || c.MockUSDC);
+  if (!hasStable && !hasMocks) throw new Error("Deployment missing token contracts (StableToken, StableCoinWallet, MockUSDT, or MockUSDC)");
+
+  // Stable token (optional when mocks exist)
+  if (hasStable) {
+    const stableAddress = c.StableToken || c.StableCoinWallet;
+    const StableArtifact = tryLoadArtifact("StableToken") || loadArtifact("StableCoinWallet");
+    result.stableToken = new ethers.Contract(stableAddress, StableArtifact.abi, runner);
+    result.stableCoinWallet = result.stableToken;
+  }
+
+  // Mock stablecoins (6 decimals)
+  if (c.MockUSDT) {
+    const abi = tryLoadArtifact("MockUSDT");
+    if (abi) result.mockUsdt = new ethers.Contract(c.MockUSDT, abi.abi, runner);
+  }
+  if (c.MockUSDC) {
+    const abi = tryLoadArtifact("MockUSDC");
+    if (abi) result.mockUsdc = new ethers.Contract(c.MockUSDC, abi.abi, runner);
+  }
 
   // Vault (on-chain only)
   if (c.Vault) {
@@ -59,4 +76,21 @@ export function getContracts({ write = false } = {}) {
   }
 
   return result;
+}
+
+/** Decimals for mock tokens (USDT/USDC use 6). */
+const MOCK_DECIMALS = 6;
+
+/**
+ * Get the ERC20 contract and decimals for an asset when mock tokens are deployed.
+ * @param {object} contracts - Result of getContracts()
+ * @param {string} asset - e.g. "USDT", "USDC"
+ * @returns {{ contract: ethers.Contract, decimals: number } | null}
+ */
+export function getTokenForAsset(contracts, asset) {
+  const A = String(asset || "").toUpperCase();
+  if (A === "USDT" && contracts.mockUsdt) return { contract: contracts.mockUsdt, decimals: MOCK_DECIMALS };
+  if (A === "USDC" && contracts.mockUsdc) return { contract: contracts.mockUsdc, decimals: MOCK_DECIMALS };
+  if ((A === "SWC" || A === "USD") && contracts.stableToken) return { contract: contracts.stableToken, decimals: 18 };
+  return null;
 }

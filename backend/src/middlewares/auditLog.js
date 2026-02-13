@@ -2,6 +2,7 @@ import AuditLog from "../models/auditLog.js";
 
 export async function writeAuditLog({
   userId,
+  walletId,
   action,
   status = "SUCCESS",
   message,
@@ -21,6 +22,7 @@ export async function writeAuditLog({
 
     await AuditLog.create({
       userId,
+      walletId,
       action,
       status,
       message,

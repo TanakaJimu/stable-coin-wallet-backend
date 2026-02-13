@@ -17,7 +17,7 @@ export default {
       chainId: 31337
     },
     amoy: {
-      url: process.env.BLOCKCHAIN_RPC_URL || process.env.RPC_URL || "",
+      url: process.env.RPC_URL || process.env.BLOCKCHAIN_RPC_URL || "",
       chainId: 80002,
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : []
     },

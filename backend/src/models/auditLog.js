@@ -2,12 +2,8 @@ import mongoose from "mongoose";
 
 const auditLogSchema = new mongoose.Schema(
   {
-    // Who performed the action
-    userId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      index: true,
-    },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", index: true },
+    walletId: { type: mongoose.Schema.Types.ObjectId, ref: "Wallet", index: true },
 
     // What happened
     action: {

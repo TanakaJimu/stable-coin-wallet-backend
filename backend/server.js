@@ -12,6 +12,7 @@ import transactionRoutes from "./src/routes/transactionRoutes.js";
 import secretsRoutes from "./src/routes/secretsRoutes.js";
 import nftRoutes from "./src/routes/nftRoutes.js";
 import { swaggerSpec } from "./src/config/swagger.js";
+import { errorHandler } from "./src/middlewares/errorHandler.js";
 
 dotenv.config();
 
@@ -33,7 +34,22 @@ if (!MONGO_URI) {
 //  DB connect
 mongoose
   .connect(MONGO_URI)
-  .then(() => console.log(" MongoDB connected"))
+  .then(() => {
+    console.log(" MongoDB connected");
+    // Log connected contracts (after MongoDB is up)
+    import("./src/config/loadDeployment.js")
+      .then(({ loadDeployment }) => loadDeployment())
+      .then((deployment) => {
+        const c = deployment.contracts || {};
+        const names = Object.entries(c)
+          .filter(([, addr]) => addr)
+          .map(([name, addr]) => `  ${name}: ${addr}`);
+        console.log(" Contracts connected (" + deployment.network + ", chainId " + deployment.chainId + "):");
+        if (names.length) names.forEach((line) => console.log(line));
+        else console.log("  (none)");
+      })
+      .catch((e) => console.warn(" Contracts not loaded (set CHAIN_ID + DEPLOYMENTS_PATH if using chain):", e?.message));
+  })
   .catch((err) => {
     console.error(" MongoDB connection error:", err.message);
     process.exit(1);
@@ -135,10 +151,7 @@ app.use((req, res) => {
   res.status(404).json({ message: "Route not found", path: req.originalUrl });
 });
 
-// error handler
-app.use((err, req, res, next) => {
-  console.error(" Unhandled error:", err);
-  res.status(500).json({ message: "Server error" });
-});
+// Central error handler (ApiError + logger)
+app.use(errorHandler);
 
 app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));

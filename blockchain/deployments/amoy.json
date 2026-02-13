@@ -3,6 +3,8 @@
   "network": "amoy",
   "contracts": {
     "StableCoinWallet": "0x4BdA811a0F5002535a096109dacc15C992D751c0",
-    "WalletNFT": "0xECb3071B0bf2cEe31085e0C7888342C626C214d6"
+    "WalletNFT": "0xECb3071B0bf2cEe31085e0C7888342C626C214d6",
+    "MockUSDT": "0x83e4D17029a1a81D5f4bBD1D3ef1c1c91f35022f",
+    "MockUSDC": "0x23c6cDA5C992acDdc99cB8DF1164D42D20E77838"
   }
 }

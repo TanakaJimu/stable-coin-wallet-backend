@@ -1,5 +1,7 @@
 import { getContracts } from "../blockchain/contracts.js";
+import { loadDeployment } from "../config/loadDeployment.js";
 import { ethers } from "ethers";
+import * as onchainVerification from "./onchainVerification.service.js";
 
 /**
  * Get WalletNFT mint info (read-only).
@@ -52,4 +54,33 @@ export async function mintNft({ tokenUri, toAddress }) {
     txHash: receipt?.hash ?? tx.hash,
     to: finalOwner,
   };
+}
+
+/**
+ * Get WalletNFT (or NFTPass) contract address from deployment.
+ * @returns {string|null}
+ */
+export function getWalletNftAddress() {
+  try {
+    const d = loadDeployment();
+    return d.contracts?.WalletNFT || d.contracts?.NFTPass || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Verify an on-chain NFT mint by txHash. Ensures Transfer(from=0, to=owner, tokenId) from WalletNFT.
+ * @param {{ txHash: string, expectedTo: string }}
+ * @returns {Promise<{ tokenId: number, to: string }>}
+ */
+export async function verifyMintOnChain({ txHash, expectedTo }) {
+  const nftAddress = getWalletNftAddress();
+  if (!nftAddress) throw new Error("WalletNFT address not configured");
+  const { tokenId, to } = await onchainVerification.verifyNftMint({
+    txHash,
+    nftContractAddress: nftAddress,
+    expectedTo,
+  });
+  return { tokenId: Number(tokenId), to };
 }

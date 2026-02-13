@@ -15,5 +15,6 @@ const WalletAddressSchema = new mongoose.Schema(
 );
 
 WalletAddressSchema.index({ walletId: 1, asset: 1, network: 1, address: 1 }, { unique: true });
+WalletAddressSchema.index({ address: 1 }); // for addressBelongsToUser lookups
 
 export default mongoose.model("WalletAddress", WalletAddressSchema);

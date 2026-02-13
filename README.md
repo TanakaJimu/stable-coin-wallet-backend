@@ -50,6 +50,10 @@ Stable_Wallet_Coin_Backend/
    ```env
    DEPLOYMENTS_PATH=../blockchain/deployments
    CHAIN_ID=80002
+   AMOY_RPC_URL=https://rpc-amoy.polygon.technology
+   MOCK_USDT_ADDRESS=0x...   # from blockchain/deployments/amoy.json
+   MOCK_USDC_ADDRESS=0x...
+   MOCK_SWAP_ADDRESS=0x...   # MockSwap contract for USDT↔USDC
    ```
 
 ## Running the backend
