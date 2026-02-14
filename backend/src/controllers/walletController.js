@@ -5,10 +5,11 @@ import WalletAddress from "../models/walletAddressModel.js";
 import { writeAuditLog } from "../middlewares/auditLog.js";
 import { assertPositiveAmount, to2 } from "../utils/money.js";
 import { SUPPORTED_ASSETS, SUPPORTED_NETWORKS } from "../utils/constants.js";
-import { getTokenInfo, normalizeNetwork } from "../utils/tokenRegistry.js";
+import { getTokenInfo, normalizeNetwork, SUPPORTED_ONCHAIN_NETWORKS, SUPPORTED_ONCHAIN_ASSETS } from "../utils/tokenRegistry.js";
 import { normAddress } from "../utils/chain.js";
 import * as onchainVerification from "../services/onchainVerification.service.js";
 import * as ledgerService from "../services/ledger.service.js";
+import * as onchainBalance from "../services/onchainBalance.service.js";
 
 const CHAIN_ID_AMOY = 80002;
 
@@ -121,13 +122,203 @@ export async function listWallets(req, res) {
   }
 }
 
+/**
+ * GET /api/wallet/summary
+ * Off-chain (default): returns DB ledger balances for default wallet.
+ * On-chain: ?mode=onchain&network=POLYGON_AMOY — fetches ERC20 balances from chain for user's default address on that network.
+ *
+ * Postman:
+ *   Off-chain: GET /api/wallet/summary
+ *   On-chain:  GET /api/wallet/summary?mode=onchain&network=POLYGON_AMOY
+ */
 export async function getSummary(req, res) {
   try {
     const wallet = await getWalletOrThrow(req.user.id);
+    const mode = (req.query && req.query.mode) ? String(req.query.mode).toLowerCase() : "offchain";
+    const network = (req.query && req.query.network) ? String(req.query.network).toUpperCase() : "POLYGON_AMOY";
+
+    if (mode === "onchain") {
+      if (!SUPPORTED_ONCHAIN_NETWORKS.includes(network)) {
+        return res.status(400).json({
+          message: `Unsupported network for on-chain balance. Use one of: ${SUPPORTED_ONCHAIN_NETWORKS.join(", ")}`,
+        });
+      }
+      const wa = await WalletAddress.findOne({
+        walletId: wallet._id,
+        network,
+        isDefault: true,
+      });
+      if (!wa) {
+        return res.status(400).json({
+          message: "No stored address for this network. Generate one first.",
+        });
+      }
+      const address = wa.address;
+      const results = await onchainBalance.getManyBalances({
+        network,
+        assets: SUPPORTED_ONCHAIN_ASSETS,
+        address,
+      });
+      const balances = results.map((r) => {
+        if (r.error) return { asset: r.asset, error: r.error };
+        return {
+          asset: r.asset,
+          balance: r.balance,
+          raw: r.raw,
+          tokenAddress: r.tokenAddress,
+          decimals: r.decimals,
+        };
+      });
+      return res.json({
+        walletId: wallet._id.toString(),
+        mode: "onchain",
+        network,
+        address,
+        balances,
+      });
+    }
+
+    // Off-chain: current DB ledger
     const balances = await Balance.find({ walletId: wallet._id }).sort({ asset: 1 });
     return res.json({ walletId: wallet._id, balances });
   } catch (e) {
     return res.status(400).json({ message: e.message });
+  }
+}
+
+/**
+ * Get balance for a specific wallet by id. Wallet must belong to the authenticated user.
+ * Query: ?asset=USDT (optional). ?mode=onchain&network=POLYGON_AMOY for on-chain ERC20 balances.
+ */
+export async function getWalletBalance(req, res) {
+  try {
+    const { walletId } = req.params;
+    const { asset, mode, network } = req.query;
+    if (!walletId) return res.status(400).json({ message: "walletId is required" });
+
+    const wallet = await Wallet.findOne({ _id: walletId, userId: req.user.id });
+    if (!wallet) return res.status(404).json({ message: "Wallet not found" });
+
+    const modeNorm = (mode && String(mode).toLowerCase()) || "offchain";
+    const networkNorm = (network && String(network).toUpperCase()) || "POLYGON_AMOY";
+
+    if (modeNorm === "onchain") {
+      if (!SUPPORTED_ONCHAIN_NETWORKS.includes(networkNorm)) {
+        return res.status(400).json({
+          message: `Unsupported network for on-chain. Use: ${SUPPORTED_ONCHAIN_NETWORKS.join(", ")}`,
+        });
+      }
+      const wa = await WalletAddress.findOne({
+        walletId: wallet._id,
+        network: networkNorm,
+        isDefault: true,
+      });
+      if (!wa) {
+        return res.status(400).json({
+          message: "No stored address for this network. Generate one first (e.g. derive-address).",
+        });
+      }
+      const results = await onchainBalance.getManyBalances({
+        network: networkNorm,
+        assets: asset ? [String(asset).toUpperCase()] : SUPPORTED_ONCHAIN_ASSETS,
+        address: wa.address,
+      });
+      const balances = results.map((r) => {
+        if (r.error) return { asset: r.asset, error: r.error };
+        return {
+          asset: r.asset,
+          balance: r.balance,
+          raw: r.raw,
+          tokenAddress: r.tokenAddress,
+          decimals: r.decimals,
+        };
+      });
+      return res.json({
+        walletId: wallet._id.toString(),
+        wallet: { _id: wallet._id, name: wallet.name, isDefault: wallet.isDefault },
+        mode: "onchain",
+        network: networkNorm,
+        address: wa.address,
+        balances,
+      });
+    }
+
+    const filter = { walletId: wallet._id };
+    if (asset) filter.asset = String(asset).toUpperCase();
+    const balances = await Balance.find(filter).sort({ asset: 1 });
+
+    return res.json({
+      walletId: wallet._id,
+      wallet: { _id: wallet._id, name: wallet.name, isDefault: wallet.isDefault },
+      balances,
+    });
+  } catch (e) {
+    return res.status(500).json({ message: e.message });
+  }
+}
+
+/**
+ * Get balances for the wallet that owns the given derived address.
+ * Query: address=0x... (required). Optional: ?asset=USDT. ?mode=onchain&network=POLYGON_AMOY for on-chain ERC20 balances at that address.
+ */
+export async function getBalanceByAddress(req, res) {
+  try {
+    const { address, asset, mode, network } = req.query;
+    const rawAddress = (address && typeof address === "string") ? address.trim() : "";
+    if (!rawAddress) return res.status(400).json({ message: "address is required" });
+
+    const ownership = await addressBelongsToUser(req.user.id, rawAddress);
+    if (!ownership) return res.status(404).json({ message: "Address not found or not owned by you" });
+
+    const wallet = await Wallet.findOne({ _id: ownership.walletId, userId: req.user.id });
+    if (!wallet) return res.status(404).json({ message: "Wallet not found" });
+
+    const modeNorm = (mode && String(mode).toLowerCase()) || "offchain";
+    const networkNorm = (network && String(network).toUpperCase()) || "POLYGON_AMOY";
+
+    if (modeNorm === "onchain") {
+      if (!SUPPORTED_ONCHAIN_NETWORKS.includes(networkNorm)) {
+        return res.status(400).json({
+          message: `Unsupported network for on-chain. Use: ${SUPPORTED_ONCHAIN_NETWORKS.join(", ")}`,
+        });
+      }
+      const results = await onchainBalance.getManyBalances({
+        network: networkNorm,
+        assets: asset ? [String(asset).toUpperCase()] : SUPPORTED_ONCHAIN_ASSETS,
+        address: rawAddress.toLowerCase(),
+      });
+      const balances = results.map((r) => {
+        if (r.error) return { asset: r.asset, error: r.error };
+        return {
+          asset: r.asset,
+          balance: r.balance,
+          raw: r.raw,
+          tokenAddress: r.tokenAddress,
+          decimals: r.decimals,
+        };
+      });
+      return res.json({
+        address: rawAddress.toLowerCase(),
+        walletId: wallet._id.toString(),
+        wallet: { _id: wallet._id, name: wallet.name, isDefault: wallet.isDefault },
+        mode: "onchain",
+        network: networkNorm,
+        balances,
+      });
+    }
+
+    const filter = { walletId: wallet._id };
+    if (asset) filter.asset = String(asset).toUpperCase();
+    const balances = await Balance.find(filter).sort({ asset: 1 });
+
+    return res.json({
+      address: rawAddress.toLowerCase(),
+      walletId: wallet._id,
+      wallet: { _id: wallet._id, name: wallet.name, isDefault: wallet.isDefault },
+      balances,
+    });
+  } catch (e) {
+    return res.status(500).json({ message: e.message });
   }
 }
 

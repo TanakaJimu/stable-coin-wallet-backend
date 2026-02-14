@@ -7,6 +7,8 @@ import {
   listWallets,
   createWallet,
   getSummary,
+  getWalletBalance,
+  getBalanceByAddress,
   getReceiveAddress,
   addAsset,
   topup,
@@ -174,25 +176,120 @@ router.post("/create", createWallet);
  * @swagger
  * /api/wallet/summary:
  *   get:
- *     summary: Get wallet summary with balances
+ *     summary: Get wallet summary with balances (off-chain or on-chain)
+ *     description: |
+ *       Default (off-chain): returns DB ledger balances for default wallet.
+ *       On-chain: add query mode=onchain&network=POLYGON_AMOY to fetch ERC20 balances from blockchain.
+ *       Requires AMOY_RPC_URL and AMOY_MOCK_USDT/AMOY_MOCK_USDC (and optionally AMOY_MOCK_DAI) in .env for on-chain.
  *     tags: [Wallet]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: mode
+ *         schema:
+ *           type: string
+ *           enum: [offchain, onchain]
+ *           default: offchain
+ *       - in: query
+ *         name: network
+ *         schema:
+ *           type: string
+ *           default: POLYGON_AMOY
+ *         description: Used when mode=onchain (only POLYGON_AMOY supported)
  *     responses:
  *       200:
- *         description: Wallet summary retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/WalletSummary'
+ *         description: Wallet summary (off-chain: walletId + balances from DB; on-chain: walletId, mode, network, address, balances from chain)
  *       400:
- *         description: Wallet not found or locked
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
+ *         description: Wallet not found/locked, or (on-chain) unsupported network / no stored address for network
  */
+// Postman examples:
+//   Off-chain: GET {{baseUrl}}/api/wallet/summary  (Authorization: Bearer <token>)
+//   On-chain:  GET {{baseUrl}}/api/wallet/summary?mode=onchain&network=POLYGON_AMOY
 router.get("/summary", getSummary);
+
+/**
+ * @swagger
+ * /api/wallet/balance-by-address:
+ *   get:
+ *     summary: Get balances by derived address (off-chain or on-chain)
+ *     description: Pass address=0x... (required). Default returns DB ledger. Add mode=onchain&network=POLYGON_AMOY to fetch ERC20 balances from chain for that address.
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: address
+ *         required: true
+ *         schema:
+ *           type: string
+ *           example: "0x..."
+ *       - in: query
+ *         name: asset
+ *         schema:
+ *           type: string
+ *           example: USDT
+ *       - in: query
+ *         name: mode
+ *         schema:
+ *           type: string
+ *           enum: [offchain, onchain]
+ *       - in: query
+ *         name: network
+ *         schema:
+ *           type: string
+ *           default: POLYGON_AMOY
+ *     responses:
+ *       200:
+ *         description: address, walletId, wallet, balances (or mode/network/balances when onchain)
+ *       404:
+ *         description: Address not found or not owned by you
+ *       401:
+ *         description: Unauthorized
+ */
+router.get("/balance-by-address", getBalanceByAddress);
+
+/**
+ * @swagger
+ * /api/wallet/{walletId}/balance:
+ *   get:
+ *     summary: Get balance for a specific wallet (off-chain or on-chain)
+ *     description: Default returns DB ledger. Add mode=onchain&network=POLYGON_AMOY to fetch ERC20 balances for this wallet's default address on that network.
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: walletId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: asset
+ *         schema:
+ *           type: string
+ *           example: USDT
+ *       - in: query
+ *         name: mode
+ *         schema:
+ *           type: string
+ *           enum: [offchain, onchain]
+ *       - in: query
+ *         name: network
+ *         schema:
+ *           type: string
+ *           default: POLYGON_AMOY
+ *     responses:
+ *       200:
+ *         description: walletId, wallet, balances (or + mode, network, address when onchain)
+ *       400:
+ *         description: (onchain) No stored address for network
+ *       404:
+ *         description: Wallet not found
+ *       401:
+ *         description: Unauthorized
+ */
+router.get("/:walletId/balance", getWalletBalance);
 
 /**
  * @swagger

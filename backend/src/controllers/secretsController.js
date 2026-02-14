@@ -1,5 +1,6 @@
 import UserSecret from "../models/userSecret.js";
 import Wallet from "../models/wallet.js";
+import WalletAddress from "../models/walletAddressModel.js";
 import HDWalletSecret from "../models/hdWalletSecret.model.js";
 import Balance from "../models/balance.js";
 import { SUPPORTED_ASSETS, SUPPORTED_NETWORKS } from "../utils/constants.js";
