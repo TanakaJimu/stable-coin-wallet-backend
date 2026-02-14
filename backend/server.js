@@ -11,6 +11,7 @@ import beneficiaryRoutes from "./src/routes/beneficiaryRoute.js";
 import transactionRoutes from "./src/routes/transactionRoutes.js";
 import secretsRoutes from "./src/routes/secretsRoutes.js";
 import nftRoutes from "./src/routes/nftRoutes.js";
+import addressRoutes from "./src/routes/addressRoute.js";
 import { swaggerSpec } from "./src/config/swagger.js";
 import { errorHandler } from "./src/middlewares/errorHandler.js";
 
@@ -83,6 +84,7 @@ app.get("/api", (req, res) => {
       transactions: `${base}/api/transactions`,
       secrets: `${base}/api/secrets`,
       nft: `${base}/api/nft`,
+      address: `${base}/api/address`,
     },
     docs: { swagger: `${base}/api-docs`, redoc: `${base}/api-docs-redoc`, openapi: `${base}/openapi.json` },
   });
@@ -145,6 +147,7 @@ app.use("/api/beneficiary", beneficiaryRoutes);
 app.use("/api/transactions", transactionRoutes);
 app.use("/api/secrets", secretsRoutes);
 app.use("/api/nft", nftRoutes);
+app.use("/api/address", addressRoutes);
 
 // 404
 app.use((req, res) => {

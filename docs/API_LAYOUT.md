@@ -77,20 +77,57 @@ All routes require **requireAuth** and an existing wallet.
 
 ## `/api/secrets`
 
-All routes require **requireAuth**.
+All routes require **requireAuth**. Secrets are **mnemonic-based (HD wallet)** only; there is no API to generate random custodial addresses.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/secrets/createSecrets` | **Generate** a new custodial address (server creates address + encrypted key). Body optional: `walletId?`, `network?`, `asset?`, `label?`, `setDefault?`. Do not send userAddress/privateKey. |
-| GET | `/api/secrets/readSecrets` | Read secrets (address only) |
+| GET | `/api/secrets/readSecrets` | Read user secrets (UserSecret; address only) |
 | GET | `/api/secrets/readDecryptedSecrets` | Read decrypted secrets (sensitive) |
 | PUT | `/api/secrets/updateSecrets` | Update secrets |
 | DELETE | `/api/secrets/deleteSecrets` | Delete secrets |
-| POST | `/api/secrets/generate` | **Custodial:** generate new address (ethers), store encrypted key; body `walletId?`, `network?`, `asset?`, `label?`, `setDefault?` |
-| GET | `/api/secrets` | **Custodial:** list addresses (no private key) |
-| GET | `/api/secrets/:id` | **Custodial:** get one secret metadata |
-| POST | `/api/secrets/read-decrypted` | **Custodial:** return private key (requires `x-confirm: true` + body `secretId`; rate limited) |
-| DELETE | `/api/secrets/:id` | **Custodial:** soft-delete secret |
+| POST | `/api/secrets/read-decrypted` | **HD Wallet:** return private key for derived address. Body: `{ address }`. Key is derived from mnemonic via HDNodeWallet. Requires `x-confirm: true`; rate limited. |
+| POST | `/api/secrets/init-mnemonic` | **HD Wallet:** ensure user has one encrypted mnemonic (create if missing). Body optional: `network`. Response: `{ hasMnemonic, network, walletId }`. Never returns mnemonic. Requires MASTER_KEY. |
+| POST | `/api/secrets/derive-address` | **HD Wallet:** derive next address at `m/44'/60'/0'/0/{index}`, store in WalletAddress. Body: `network`, `asset`, `label?`, `setDefault?`. Response: `{ address, index, walletId, network, asset, default, isCustodial }`. |
+| GET | `/api/secrets/addresses` | **HD Wallet:** list stored derived addresses. Query: `network?`, `asset?`. Response: array of `{ address, index, asset, network, label, isDefault, createdAt }`. No mnemonic or private key. |
+
+**HD Wallet:** One encrypted mnemonic per user (MASTER_KEY). Addresses derived at path `m/44'/60'/0'/0/{index}`. Private key is retrieved via HDNodeWallet from mnemonic when needed (read-decrypted). If MASTER_KEY is missing, init/derive/read-decrypted return **503**.
+
+### Postman examples (HD Wallet)
+
+1. **POST init-mnemonic** (ensure mnemonic exists)
+   - **URL:** `POST {{baseUrl}}/api/secrets/init-mnemonic`
+   - **Headers:** `Authorization: Bearer <access_token>`
+   - **Body (optional):** `{ "network": "POLYGON_AMOY" }`
+   - **Example response:** `{ "success": true, "message": "Mnemonic ready", "data": { "hasMnemonic": true, "network": "POLYGON_AMOY", "walletId": "..." } }`
+
+2. **POST derive-address**
+   - **URL:** `POST {{baseUrl}}/api/secrets/derive-address`
+   - **Headers:** `Authorization: Bearer <access_token>`, `Content-Type: application/json`
+   - **Body:** `{ "network": "POLYGON_AMOY", "asset": "USDT", "label": "deposit-1", "setDefault": true }`
+   - **Example response:** `{ "success": true, "address": "0x...", "index": 0, "walletId": "...", "network": "POLYGON_AMOY", "asset": "USDT", "default": true, "isCustodial": true }`
+
+3. **GET list addresses**
+   - **URL:** `GET {{baseUrl}}/api/secrets/addresses?network=POLYGON_AMOY&asset=USDT`
+   - **Headers:** `Authorization: Bearer <access_token>`
+   - **Example response:** `{ "success": true, "data": [ { "address": "0x...", "index": 0, "asset": "USDT", "network": "POLYGON_AMOY", "label": "deposit-1", "isDefault": true, "createdAt": "..." } ], "message": "Addresses list" }`
+
+---
+
+## `/api/address`
+
+All routes require **requireAuth**. Addresses are **derived from mnemonic** (MetaMask-style HD path `m/44'/60'/0'/0/index`), not randomly generated. Import mnemonic first, then derive.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/address/import-mnemonic` | Store encrypted mnemonic (body: `mnemonic` — 12 or 24 words). Call once before deriving. |
+| POST | `/api/address/derive` | Derive address from stored mnemonic (body: `network?`, `label?`, `index?`, `storePrivateKey?`). Default network POLYGON_AMOY. |
+| POST | `/api/address/generate` | Alias for `/derive`. |
+| GET | `/api/address` | List derived addresses (query: `network?`). Excludes encryptedPrivateKey. |
+| GET | `/api/address/default` | Get default address (query: `network=POLYGON_AMOY`). |
+| PATCH | `/api/address/:id/default` | Set address as default for its network. |
+| DELETE | `/api/address/:id` | Delete address (owner only). If was default, next becomes default. |
+
+Requires `WALLET_ENC_KEY` in .env (32+ chars).
 
 ---
 
@@ -132,12 +169,15 @@ All routes require **requireAuth**.
 │   ├── GET   /stats
 │   ├── GET   /:id
 │   └── PATCH /:id/status
-├── secrets
-│   ├── POST   createSecrets
+├── secrets (mnemonic / HD wallet)
 │   ├── GET    readSecrets
 │   ├── GET    readDecryptedSecrets
 │   ├── PUT    updateSecrets
-│   └── DELETE deleteSecrets
+│   ├── DELETE deleteSecrets
+│   ├── POST   read-decrypted   (HD: private key from mnemonic)
+│   ├── POST   init-mnemonic
+│   ├── POST   derive-address
+│   └── GET    addresses
 └── nft
     ├── GET  info
     └── POST mint (auth)

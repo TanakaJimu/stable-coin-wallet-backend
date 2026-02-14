@@ -1,85 +1,20 @@
 import { Router } from "express";
 import { requireAuth } from "../middlewares/auth.js";
 import {
-  createSecrets,
   readSecrets,
   readDecryptedSecrets,
   updateSecrets,
   deleteSecrets,
-  generateCustodialAddress,
-  listCustodialSecrets,
-  getSecretById,
   readDecryptedStrict,
-  deleteSecretById,
+  initMnemonic,
+  deriveAddress,
+  listAddresses,
 } from "../controllers/secretsController.js";
 
 const router = Router();
 
 // All secrets routes require authentication
 router.use(requireAuth);
-
-/**
- * @swagger
- * /api/secrets/createSecrets:
- *   post:
- *     summary: Generate a new custodial address (server creates address and encrypted key)
- *     description: Creates a new Ethereum-style address via ethers; private key is encrypted and stored. Do NOT send userAddress or privateKey — the server generates the address.
- *     tags: [Secrets]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             description: Only these fields; walletId is determined by the backend (default wallet).
- *             properties:
- *               network:
- *                 type: string
- *                 default: "POLYGON_AMOY"
- *                 example: "POLYGON_AMOY"
- *               asset:
- *                 type: string
- *                 example: "USDT"
- *               label:
- *                 type: string
- *                 example: "deposit-1"
- *               setDefault:
- *                 type: boolean
- *                 default: false
- *     responses:
- *       201:
- *         description: New custodial address generated
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 secretId:
- *                   type: string
- *                 address:
- *                   type: string
- *                 walletId:
- *                   type: string
- *                 network:
- *                   type: string
- *                 asset:
- *                   type: string
- *                   nullable: true
- *                   example: "USDT"
- *                 default:
- *                   type: boolean
- *                   description: Whether this address is the default for the wallet
- *                 isCustodial:
- *                   type: boolean
- *       400:
- *         description: Validation error (e.g. do not send userAddress/privateKey)
- *       401:
- *         description: Unauthorized
- */
-router.post("/createSecrets", createSecrets);
 
 /**
  * @swagger
@@ -218,12 +153,137 @@ router.put("/updateSecrets", updateSecrets);
  */
 router.delete("/deleteSecrets", deleteSecrets);
 
-// ---------- Custodial (server-generated) address API ----------
-router.post("/generate", generateCustodialAddress);
-router.get("/", listCustodialSecrets);
-router.get("/:id", getSecretById);
+/**
+ * @swagger
+ * /api/secrets/read-decrypted:
+ *   post:
+ *     summary: HD Wallet — return private key for derived address (from mnemonic via HDNodeWallet)
+ *     description: Body { address }. Requires x-confirm true header. Rate limited. Key is derived from stored mnemonic, not stored.
+ *     tags: [Secrets]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [address]
+ *             properties:
+ *               address:
+ *                 type: string
+ *                 description: HD-derived address (key derived from mnemonic via HDNodeWallet)
+ *               reason:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: address and privateKey
+ *       403:
+ *         description: Missing confirmation or rate limited
+ *       404:
+ *         description: Address not found or not HD-derived
+ *       503:
+ *         description: MASTER_KEY not set
+ *       401:
+ *         description: Unauthorized
+ */
 router.post("/read-decrypted", readDecryptedStrict);
-router.delete("/:id", deleteSecretById);
+
+// ---------- HD Wallet (mnemonic / derived addresses) ----------
+
+/**
+ * @swagger
+ * /api/secrets/init-mnemonic:
+ *   post:
+ *     summary: HD Wallet — ensure user has mnemonic (create if missing)
+ *     description: One encrypted mnemonic per user. Never returns mnemonic. Requires MASTER_KEY.
+ *     tags: [Secrets]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               network:
+ *                 type: string
+ *                 default: "POLYGON_AMOY"
+ *     responses:
+ *       200:
+ *         description: Mnemonic ready; returns hasMnemonic, network, walletId
+ *       503:
+ *         description: MASTER_KEY not set in .env
+ *       401:
+ *         description: Unauthorized
+ */
+router.post("/init-mnemonic", initMnemonic);
+
+/**
+ * @swagger
+ * /api/secrets/derive-address:
+ *   post:
+ *     summary: HD Wallet — derive next address, store in WalletAddress
+ *     description: Derives at m/44'/60'/0'/0/{index}. Call init-mnemonic first if needed.
+ *     tags: [Secrets]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               network:
+ *                 type: string
+ *                 default: "POLYGON_AMOY"
+ *               asset:
+ *                 type: string
+ *                 default: "USDT"
+ *               label:
+ *                 type: string
+ *               setDefault:
+ *                 type: boolean
+ *                 default: false
+ *     responses:
+ *       201:
+ *         description: Address derived; returns address, index, walletId, network, asset, default, isCustodial
+ *       400:
+ *         description: No mnemonic — call init-mnemonic first
+ *       503:
+ *         description: MASTER_KEY not set in .env
+ *       401:
+ *         description: Unauthorized
+ */
+router.post("/derive-address", deriveAddress);
+
+/**
+ * @swagger
+ * /api/secrets/addresses:
+ *   get:
+ *     summary: HD Wallet — list stored derived addresses
+ *     description: Returns address metadata only (no mnemonic, no private key). Optional query filters.
+ *     tags: [Secrets]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: network
+ *         schema:
+ *           type: string
+ *           example: POLYGON_AMOY
+ *       - in: query
+ *         name: asset
+ *         schema:
+ *           type: string
+ *           example: USDT
+ *     responses:
+ *       200:
+ *         description: Array of address, index, asset, network, label, isDefault, createdAt
+ *       401:
+ *         description: Unauthorized
+ */
+router.get("/addresses", listAddresses);
 
 export default router;
 

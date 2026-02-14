@@ -136,6 +136,83 @@ The API can **generate** Ethereum-style addresses (ethers `Wallet.createRandom()
 3. Get deposit address: **GET /api/wallet/receive-address?asset=USDT&network=POLYGON** (use the custodial address as the user’s receive address).
 4. From MetaMask (with the generated address), send MockUSDT to that receive address; then **POST /api/wallet/topup** with `txHash`, `amount`, `toAddress` to verify on-chain deposit.
 
+## Address API (`/api/address`) — MetaMask-style derivation
+
+Addresses are **derived from your mnemonic** (like MetaMask), not randomly generated. You import a 12 or 24 word phrase once; the backend derives addresses at path `m/44'/60'/0'/0/index`.
+
+All routes require `Authorization: Bearer <token>`.
+
+### Security & operational notes
+
+- **WALLET_ENC_KEY:** Set in `.env` (32+ characters). Used to encrypt the mnemonic and optional derived keys. Never commit this key.
+- **Never log or return** mnemonics or private keys. Responses never include them.
+- **Production:** Use HSM or KMS for key custody; rate-limit and strengthen auth.
+
+### Flow
+
+1. **Import mnemonic** (once): `POST /api/address/import-mnemonic` with your BIP-39 phrase (12 or 24 words). Stored encrypted.
+2. **Derive addresses**: `POST /api/address/derive` (or `/generate`) to derive the next address, or pass `index` (0, 1, 2...) for a specific account index. Optionally set `storePrivateKey: true` to store the derived key encrypted (custodial).
+3. **List / default / set default / delete** as below.
+
+### Postman / curl examples
+
+**1. Import mnemonic (do this first):**
+
+```bash
+curl -X POST "http://localhost:3000/api/address/import-mnemonic" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"mnemonic":"word1 word2 word3 ... twelve or twenty four words"}'
+```
+
+Expected response (201): `{ "success": true, "message": "Mnemonic stored securely. You can now derive addresses." }`
+
+**2. Derive address (retrieve like MetaMask):**
+
+```bash
+curl -X POST "http://localhost:3000/api/address/derive" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"network":"POLYGON_AMOY","label":"Account 0","storePrivateKey":false}'
+```
+
+Optional body: `index` (0, 1, 2...). If omitted, next index is used. Response (201):
+
+```json
+{
+  "id": "...",
+  "address": "0x...",
+  "network": "POLYGON_AMOY",
+  "derivationIndex": 0,
+  "label": "Account 0",
+  "isDefault": true,
+  "createdAt": "..."
+}
+```
+
+**3. List addresses:**
+
+```bash
+curl -H "Authorization: Bearer <token>" "http://localhost:3000/api/address?network=POLYGON_AMOY"
+```
+
+**4. Get default address:**
+
+```bash
+curl -H "Authorization: Bearer <token>" "http://localhost:3000/api/address/default?network=POLYGON_AMOY"
+```
+
+**5. Set default:** `PATCH /api/address/:id/default`  
+**6. Delete address:** `DELETE /api/address/:id`
+
+### Env for address API
+
+In `backend/.env`:
+
+```env
+WALLET_ENC_KEY=your-32-character-secret-key-minimum!!
+```
+
 ## License
 
 ISC

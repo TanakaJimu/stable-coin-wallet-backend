@@ -1,15 +1,17 @@
 import UserSecret from "../models/userSecret.js";
-import Secret from "../models/secret.model.js";
 import Wallet from "../models/wallet.js";
-import WalletAddress from "../models/walletAddressModel.js";
+import HDWalletSecret from "../models/hdWalletSecret.model.js";
 import Balance from "../models/balance.js";
-import { SUPPORTED_ASSETS } from "../utils/constants.js";
+import { SUPPORTED_ASSETS, SUPPORTED_NETWORKS } from "../utils/constants.js";
 import { writeAuditLog } from "../middlewares/auditLog.js";
 import { ApiResponse } from "../utils/apiResponse.js";
 import { ApiError, asyncHandler } from "../utils/apiError.js";
 import { encrypt, decrypt } from "../utils/encryption.js";
-import { encryptPrivateKey, decryptPrivateKey } from "../services/crypto.service.js";
-import { createRandomWallet } from "../services/walletGen.service.js";
+import {
+  getOrCreateUserMnemonic,
+  deriveNewAddressForUser,
+  getPrivateKeyForDerivedAddress,
+} from "../services/hdWallet.service.js";
 
 // --- Rate limit for read-decrypted (in-memory, TTL). Production: use Redis or DB. ---
 const DECRYPT_RATE_WINDOW_MS = 15 * 60 * 1000; // 15 min
@@ -59,24 +61,6 @@ async function getOrCreateWallet(userId) {
 function getEncryptionKey() {
   return process.env.ENCRYPTION_KEY || process.env.JWT_SECRET || "default-key-change-in-production";
 }
-
-/**
- * Create secrets by generating a new custodial address (server creates address + encrypted key).
- * Accepts only: network, asset, label, setDefault. walletId is assigned by the backend (default wallet).
- */
-export const createSecrets = asyncHandler(async (req, res) => {
-  if (req.body && (req.body.userAddress != null || req.body.privateKey != null)) {
-    throw ApiError.validationError(
-      "Do not send userAddress or privateKey. Send only network, asset, label, setDefault."
-    );
-  }
-  if (req.body && req.body.walletId != null) {
-    throw ApiError.validationError(
-      "Do not send walletId; it is assigned by the backend. Send only network, asset, label, setDefault."
-    );
-  }
-  return generateCustodialAddress(req, res);
-});
 
 /**
  * Read user secrets (returns address, but NOT the decrypted private key for security)
@@ -234,170 +218,26 @@ export const deleteSecrets = asyncHandler(async (req, res) => {
   return ApiResponse.success(res, null, "Secrets deleted successfully");
 });
 
-// ========== Custodial (server-generated) address API ==========
-// SECURITY: Custodial mode — server holds private keys. Use KMS for MASTER_KEY in production.
-// Prefer non-custodial flows; limit read-decrypted usage; log all decrypt events.
+// ========== HD Wallet (mnemonic) API ==========
+// One encrypted mnemonic per user; addresses derived at m/44'/60'/0'/0/{index}. Key retrieved via HDNodeWallet.
 
 /**
- * POST /api/secrets/generate — Generate new custodial address (ethers Wallet.createRandom).
- * Encrypts private key with MASTER_KEY; creates Secret + WalletAddress; optional setDefault.
- */
-export const generateCustodialAddress = asyncHandler(async (req, res) => {
-  const { network = "POLYGON_AMOY", asset, label, setDefault = false } = req.body || {};
-  const userId = req.user.id;
-
-  // Require MASTER_KEY for encryption; fail fast with clear message instead of 500
-  const masterKey = process.env.MASTER_KEY;
-  if (!masterKey || String(masterKey).length < 16) {
-    throw ApiError.serviceUnavailable(
-      "MASTER_KEY must be set in .env (min 16 characters) for custodial address generation. Add MASTER_KEY=your-secret-key to backend/.env and restart."
-    );
-  }
-
-  // Wallet is always determined by backend (default wallet or create one). User does not send walletId.
-  const wallet = await getOrCreateWallet(userId);
-
-  const net = String(network || "POLYGON_AMOY").toUpperCase();
-  const { address, privateKey } = createRandomWallet();
-  // Encrypt immediately; never persist plaintext.
-  const encrypted = encryptPrivateKey(privateKey);
-
-  const secret = await Secret.create({
-    userId,
-    walletId: wallet._id,
-    address: address.toLowerCase(),
-    network: net,
-    asset: asset ? String(asset).toUpperCase() : null,
-    label: label ? String(label).trim() : null,
-    isDefault: Boolean(setDefault),
-    isCustodial: true,
-    encrypted,
-  });
-
-  if (setDefault) {
-    await Secret.updateMany(
-      { userId, _id: { $ne: secret._id } },
-      { $set: { isDefault: false } }
-    );
-  }
-
-  // WalletAddress: link to this secret for receive-address / deposit flows. Use first supported asset if none.
-  const assetForAddress = asset ? String(asset).toUpperCase() : "USDT";
-  const depositReference = `w_${wallet._id.toString()}_${address.slice(2, 10)}`;
-  await WalletAddress.findOneAndUpdate(
-    { walletId: wallet._id, asset: assetForAddress, network: net },
-    {
-      $set: {
-        address: address.toLowerCase(),
-        label: label || depositReference,
-        isDefault: Boolean(setDefault),
-        secretId: secret._id,
-        isCustodial: true,
-      },
-    },
-    { upsert: true }
-  );
-
-  await writeAuditLog({
-    userId,
-    walletId: wallet._id,
-    action: "SECRETS_GENERATED",
-    req,
-    entityType: "Secret",
-    entityId: secret._id,
-    meta: { address: address.toLowerCase(), network: net, isCustodial: true },
-  });
-
-  const assetVal = asset ? String(asset).toUpperCase() : null;
-  return res.status(201).json({
-    success: true,
-    secretId: secret._id.toString(),
-    address: address,
-    walletId: wallet._id.toString(),
-    network: net,
-    asset: assetVal,
-    default: Boolean(setDefault),
-    isCustodial: true,
-  });
-});
-
-/**
- * GET /api/secrets — List custodial secrets for user (address only; no private key).
- */
-export const listCustodialSecrets = asyncHandler(async (req, res) => {
-  const secrets = await Secret.find({
-    userId: req.user.id,
-    deletedAt: null,
-    "encrypted.cipherText": { $ne: null },
-  })
-    .select("_id address network walletId label isDefault isCustodial createdAt")
-    .sort({ createdAt: -1 })
-    .lean();
-  const list = secrets.map((s) => ({
-    secretId: s._id.toString(),
-    address: s.address,
-    network: s.network,
-    walletId: s.walletId?.toString(),
-    label: s.label,
-    isDefault: s.isDefault,
-  }));
-  return ApiResponse.success(res, list, "Custodial secrets list");
-});
-
-/**
- * GET /api/secrets/:id — Single secret metadata (no private key). Ownership required.
- */
-export const getSecretById = asyncHandler(async (req, res) => {
-  const secret = await Secret.findOne({
-    _id: req.params.id,
-    userId: req.user.id,
-    deletedAt: null,
-  }).select("_id address network walletId asset label isDefault isCustodial createdAt lastUsedAt");
-  if (!secret) throw ApiError.notFound("Secret not found");
-  return ApiResponse.success(res, {
-    secretId: secret._id.toString(),
-    address: secret.address,
-    network: secret.network,
-    walletId: secret.walletId?.toString(),
-    asset: secret.asset,
-    label: secret.label,
-    isDefault: secret.isDefault,
-    isCustodial: secret.isCustodial,
-    createdAt: secret.createdAt,
-    lastUsedAt: secret.lastUsedAt,
-  });
-});
-
-/**
- * POST /api/secrets/read-decrypted — Return private key ONLY under strict conditions.
- * Requires: x-confirm: true header (or optional password in body — see caveat in comments).
- * Rate limited per user. Heavily audited. Use only when user explicitly needs to export key (e.g. import to MetaMask).
- * CAVEAT: Storing/validating user password for this endpoint is sensitive; prefer x-confirm for dev; in production use 2FA or step-up auth.
+ * POST /api/secrets/read-decrypted — Return private key for HD-derived address (from mnemonic via HDNodeWallet).
+ * Body: { address }. Requires x-confirm: true header. Rate limited.
  */
 export const readDecryptedStrict = asyncHandler(async (req, res) => {
   const confirmHeader = req.headers["x-confirm"] === "true" || req.headers["x-confirm"] === true;
-  const { secretId, reason, password, confirmHeader: confirmBody } = req.body || {};
+  const { address, reason, confirmHeader: confirmBody } = req.body || {};
 
-  if (!secretId) throw ApiError.validationError("secretId is required");
+  if (!address) throw ApiError.validationError("address is required (HD-derived address).");
 
-  const secret = await Secret.findOne({
-    _id: secretId,
-    userId: req.user.id,
-    deletedAt: null,
-    "encrypted.cipherText": { $ne: null },
-  });
-  if (!secret) throw ApiError.notFound("Secret not found");
-
-  // Strict: require explicit confirmation (header or body flag). Optionally require password in production.
   const confirmed = confirmHeader || confirmBody === true;
   if (!confirmed) {
     await writeAuditLog({
       userId: req.user.id,
       action: "SECRETS_DECRYPT_DENIED",
       req,
-      entityType: "Secret",
-      entityId: secret._id,
-      meta: { reason: "Missing x-confirm: true or confirmHeader in body", secretId },
+      meta: { reason: "Missing x-confirm: true or confirmHeader in body", address: address || null },
     });
     throw ApiError.forbidden(
       "Decrypt requires explicit confirmation. Send header x-confirm: true or body confirmHeader: true. Rate limit applies."
@@ -409,73 +249,183 @@ export const readDecryptedStrict = asyncHandler(async (req, res) => {
       userId: req.user.id,
       action: "SECRETS_DECRYPT_RATE_LIMITED",
       req,
-      meta: { secretId },
+      meta: { address: address || null },
     });
     throw ApiError.forbidden("Too many decrypt attempts. Try again later.");
   }
 
-  let privateKey;
   try {
-    privateKey = decryptPrivateKey(secret.encrypted);
+    const result = await getPrivateKeyForDerivedAddress({ userId: req.user.id, address });
+    await writeAuditLog({
+      userId: req.user.id,
+      action: "SECRETS_DECRYPTED",
+      req,
+      entityType: "WalletAddress",
+      meta: {
+        address: result.address,
+        reason: reason || "export",
+        source: "HDNodeWallet",
+        ip: req.ip || req.socket?.remoteAddress,
+        userAgent: req.headers["user-agent"],
+      },
+    });
+    return ApiResponse.success(res, { address: result.address, privateKey: result.privateKey });
   } catch (e) {
-    throw ApiError.internalError("Decryption failed", e.message);
+    if (e.code === "MASTER_KEY_MISSING") {
+      throw ApiError.serviceUnavailable(
+        "MASTER_KEY must be set in .env for HD key retrieval. Add MASTER_KEY=your-secret-key to backend/.env and restart."
+      );
+    }
+    if (e.message?.includes("not found") || e.message?.includes("not HD-derived")) {
+      throw ApiError.notFound(e.message);
+    }
+    throw ApiError.internalError("HD key retrieval failed", e.message);
+  }
+});
+
+// ========== HD Wallet (MetaMask-style mnemonic) API ==========
+// One encrypted mnemonic per user; addresses derived at m/44'/60'/0'/0/{index}.
+
+/**
+ * POST /api/secrets/init-mnemonic — Ensure user has mnemonic (create if missing).
+ * Response: { success, hasMnemonic, network, walletId }. Never returns mnemonic.
+ */
+export const initMnemonic = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const wallet = await getOrCreateWallet(userId);
+  const network = String(req.body?.network || "POLYGON_AMOY").toUpperCase();
+  if (!SUPPORTED_NETWORKS.includes(network)) {
+    throw ApiError.validationError(`Unsupported network: ${network}`);
   }
 
-  await Secret.updateOne({ _id: secret._id }, { $set: { lastUsedAt: new Date() } });
+  const existed = await HDWalletSecret.findOne({ userId });
+  let secret;
+  try {
+    secret = await getOrCreateUserMnemonic({
+      userId,
+      walletId: wallet._id,
+      network,
+    });
+  } catch (e) {
+    if (e.code === "MASTER_KEY_MISSING") {
+      throw ApiError.serviceUnavailable(
+        "MASTER_KEY must be set in .env (min 16 characters) for HD wallet. Add MASTER_KEY=your-secret-key to backend/.env and restart."
+      );
+    }
+    throw e;
+  }
 
-  await writeAuditLog({
-    userId: req.user.id,
-    walletId: secret.walletId,
-    action: "SECRETS_DECRYPTED",
-    req,
-    entityType: "Secret",
-    entityId: secret._id,
-    meta: {
-      address: secret.address,
-      reason: reason || "export",
-      ip: req.ip || req.socket?.remoteAddress,
-      userAgent: req.headers["user-agent"],
-    },
-  });
+  if (!existed) {
+    await writeAuditLog({
+      userId,
+      walletId: wallet._id,
+      action: "MNEMONIC_CREATED",
+      req,
+      entityType: "HDWalletSecret",
+      entityId: secret._id,
+      meta: { network: secret.network },
+    });
+  }
 
   return ApiResponse.success(res, {
-    address: secret.address,
-    privateKey,
-  });
+    hasMnemonic: true,
+    network: secret.network,
+    walletId: wallet._id.toString(),
+  }, "Mnemonic ready");
 });
 
 /**
- * DELETE /api/secrets/:id — Soft-delete custodial secret (zero out encrypted data, set deletedAt).
+ * POST /api/secrets/derive-address — Derive next HD address, store in WalletAddress.
+ * Body: { network, asset, label?, setDefault? }.
  */
-export const deleteSecretById = asyncHandler(async (req, res) => {
-  const secret = await Secret.findOne({
-    _id: req.params.id,
-    userId: req.user.id,
-  });
-  if (!secret) throw ApiError.notFound("Secret not found");
+export const deriveAddress = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const { network = "POLYGON_AMOY", asset = "USDT", label, setDefault = false } = req.body || {};
+  const net = String(network).toUpperCase();
+  const a = String(asset).toUpperCase();
+  if (!SUPPORTED_NETWORKS.includes(net)) throw ApiError.validationError(`Unsupported network: ${net}`);
+  if (!SUPPORTED_ASSETS.includes(a)) throw ApiError.validationError(`Unsupported asset: ${a}`);
 
-  const prevAddress = secret.address;
-  secret.encrypted = { cipherText: null, salt: null, iv: null, tag: null };
-  secret.address = `deleted_${secret._id}`;
-  secret.isCustodial = false;
-  secret.deletedAt = new Date();
-  await secret.save();
-
-  await WalletAddress.updateMany(
-    { secretId: secret._id },
-    { $unset: { secretId: 1 }, $set: { isCustodial: false } }
-  );
+  let result;
+  try {
+    result = await deriveNewAddressForUser({
+      userId,
+      asset: a,
+      network: net,
+      label: label ? String(label).trim() : undefined,
+      setDefault: Boolean(setDefault),
+    });
+  } catch (e) {
+    if (e.code === "MASTER_KEY_MISSING") {
+      throw ApiError.serviceUnavailable(
+        "MASTER_KEY must be set in .env (min 16 characters) for HD wallet. Add MASTER_KEY=your-secret-key to backend/.env and restart."
+      );
+    }
+    if (e.message?.includes("No mnemonic")) {
+      throw ApiError.badRequest("No mnemonic for user. Call POST /api/secrets/init-mnemonic first.");
+    }
+    throw e;
+  }
 
   await writeAuditLog({
-    userId: req.user.id,
-    walletId: secret.walletId,
-    action: "SECRETS_DELETED",
+    userId,
+    walletId: result.walletId,
+    action: "ADDRESS_DERIVED",
     req,
-    entityType: "Secret",
-    entityId: secret._id,
-    meta: { previousAddressObfuscated: prevAddress ? `${prevAddress.slice(0, 10)}...` : "n/a" },
+    entityType: "WalletAddress",
+    meta: {
+      address: result.address,
+      index: result.index,
+      network: result.network,
+      asset: result.asset,
+      isDefault: result.isDefault,
+    },
   });
 
-  return ApiResponse.success(res, null, "Secret deleted");
+  return ApiResponse.created(res, {
+    address: result.address,
+    index: result.index,
+    walletId: result.walletId.toString(),
+    network: result.network,
+    asset: result.asset,
+    default: result.isDefault,
+    isCustodial: true,
+  }, "Address derived");
 });
 
+/**
+ * GET /api/secrets/addresses?network=&asset= — List stored WalletAddress for user's wallet (HD-derived).
+ * Returns address metadata only (no mnemonic, no private key).
+ */
+export const listAddresses = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const wallet = await getOrCreateWallet(userId);
+  const { network, asset } = req.query || {};
+  const filter = { walletId: wallet._id };
+  if (network) filter.network = String(network).toUpperCase();
+  if (asset) filter.asset = String(asset).toUpperCase();
+
+  const list = await WalletAddress.find(filter)
+    .select("address derivationIndex asset network label isDefault createdAt")
+    .sort({ createdAt: 1 })
+    .lean();
+  const items = list.map((r) => ({
+    address: r.address,
+    index: r.derivationIndex ?? null,
+    asset: r.asset,
+    network: r.network,
+    label: r.label ?? null,
+    isDefault: r.isDefault,
+    createdAt: r.createdAt,
+  }));
+
+  await writeAuditLog({
+    userId,
+    walletId: wallet._id,
+    action: "ADDRESSES_LISTED",
+    req,
+    meta: { count: items.length, network: filter.network || null, asset: filter.asset || null },
+  });
+
+  return ApiResponse.success(res, items, "Addresses list");
+});
